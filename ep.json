@@ -1,0 +1,11 @@
+{
+  "parts": [
+    {
+      "name": "wags",
+      "client_hooks": {
+				"aceInitialized": "ep_wags/static/js/main:postAceInit",
+				"acePostWriteDomLineHTML": "ep_wags/static/js/main:acePostWriteDomLineHTML"
+			}
+    }
+  ]
+}

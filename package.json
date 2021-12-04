@@ -1,0 +1,35 @@
+{
+	"name": "ep_wags",
+	"description": "EP Plugin for Wags. Highly invasive.",
+	"version": "0.0.0",
+	"author": "mikesol",
+	"engines": {
+		"node": ">=10.17.1"
+	},
+	"repository": {
+		"type": "git",
+		"url": "https://github.com/mikesol/etherpad-lite.git"
+	},
+	"devDependencies": {
+		"eslint": "^7.18.0",
+		"eslint-config-etherpad": "^1.0.24",
+		"eslint-plugin-eslint-comments": "^3.2.0",
+		"eslint-plugin-mocha": "^8.0.0",
+		"eslint-plugin-node": "^11.1.0",
+		"eslint-plugin-prefer-arrow": "^1.2.3",
+		"eslint-plugin-promise": "^4.2.1",
+		"eslint-plugin-you-dont-need-lodash-underscore": "^6.10.0",
+		"purescript": "^0.14.5",
+		"purs-tidy": "^0.6.3",
+		"spago": "^0.20.3"
+	},
+	"eslintConfig": {
+		"root": true,
+		"extends": "etherpad/plugin"
+	},
+	"scripts": {
+		"bundle": "spago install && spago build && spago bundle-module --main Main --to static/js/main.js",
+		"lint": "eslint .",
+		"lint:fix": "eslint --fix ."
+	}
+}

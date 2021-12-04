@@ -13,6 +13,7 @@ npm-debug.log
 /.purs*
 /.psa*
 /.spago
+/src
 /dist
 /scripts/.venv
 .purs-repl

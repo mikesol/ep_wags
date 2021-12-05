@@ -5,7 +5,6 @@ module Main
 
 import Prelude
 
-import Control.Alt ((<|>))
 import Control.Comonad.Cofree (Cofree, mkCofree)
 import Control.Monad.Except (runExceptT, throwError)
 import Control.Promise (toAffE)
@@ -16,13 +15,13 @@ import Data.Function.Uncurried (Fn2, Fn3, mkFn2, mkFn3)
 import Data.Functor (mapFlipped)
 import Data.Map as Map
 import Data.Maybe (maybe)
-import Data.Newtype (wrap)
 import Data.Nullable (toMaybe)
 import Data.Tuple (snd)
 import Data.Tuple.Nested ((/\))
 import Effect (Effect)
 import Effect.Aff (Aff, Fiber, Milliseconds(..), delay, killFiber, launchAff, launchAff_, makeAff, try)
 import Effect.Class (liftEffect)
+import Effect.Class.Console as Log
 import Effect.Exception (error)
 import Effect.Ref as Ref
 import Effect.Unsafe (unsafePerformEffect)
@@ -39,7 +38,6 @@ import WAGS.Interpret (close, constant0Hack, context, contextResume, contextStat
 import WAGS.Lib.Learn (Analysers, FullSceneBuilder(..))
 import WAGS.Lib.Tidal (AFuture)
 import WAGS.Lib.Tidal.Engine (engine)
-import WAGS.Lib.Tidal.Tidal (openFuture)
 import WAGS.Lib.Tidal.Types (TidalRes)
 import WAGS.Lib.Tidal.Util (doDownloads)
 import WAGS.Run (Run, run)
@@ -165,6 +163,7 @@ postToolbarInitInternal args = do
                 launchAff_ do
                   doDownloads audioCtx bufferCache mempty identity wag
                   liftEffect do
+                    -- Log.info "pushing next wag"
                     nextWag wag
                     st <- Ref.read playingState
                     case st of
@@ -199,7 +198,8 @@ postToolbarInitInternal args = do
             FullSceneBuilder { triggerWorld, piece } =
               engine
                 (pure unit)
-                (map (const <<< const) ((wagEvent audioCtx) <|> pure (openFuture $ wrap 1.0))) $ (Left (r2b bufferCache))
+                (map (const <<< const) (wagEvent audioCtx))
+                (Left (r2b bufferCache))
           trigger /\ world <- snd $ triggerWorld (audioCtx /\ (pure (pure {} /\ pure {})))
           liftEffect do
             unsubscribe <- subscribe

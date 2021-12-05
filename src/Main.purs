@@ -21,7 +21,7 @@ import Data.Nullable (toMaybe)
 import Data.Tuple (snd)
 import Data.Tuple.Nested ((/\))
 import Effect (Effect)
-import Effect.Aff (Aff, Fiber, Milliseconds(..), delay, killFiber, launchAff, launchAff_, makeAff)
+import Effect.Aff (Aff, Fiber, Milliseconds(..), delay, killFiber, launchAff, launchAff_, makeAff, try)
 import Effect.Class (liftEffect)
 import Effect.Exception (error)
 import Effect.Ref as Ref
@@ -125,7 +125,8 @@ postToolbarInitInternal args = do
           crunch audioCtx txt nextWag = do
             -- todo: can compile be fiberized to be faster?
             -- Log.info "step 1"
-            js <- makeAff \cb -> do
+            res <- try $ makeAff \cb -> do
+              removeAlert
               compile
                 { code: txt
                 , loader
@@ -147,22 +148,29 @@ postToolbarInitInternal args = do
                 }
               mempty
             -- Log.info "step 2"
-            liftEffect $ do
-              modules <- Ref.read modulesR
-              o <- evalSources modules js
-              wag' <- (runExceptT $ readProp "wag" o.evaluated)
-                >>= either (throwError <<< error <<< show) pure
-              Ref.write o.modules modulesR
-              let wag = (unsafeCoerce :: Foreign -> AFuture) wag'
-              launchAff_ do
-                doDownloads audioCtx bufferCache mempty identity wag
-                liftEffect do
-                  nextWag wag
-                  st <- Ref.read playingState
-                  case st of
-                    Loading _ -> onPlay
-                    _ -> pure unit
-                  Ref.modify_ (minPlay audioCtx) playingState
+            res # either
+              ( \_ -> liftEffect do
+                  setAlert
+                  -- in case we are not playing yet
+                  -- we set on play
+                  onPlay
+              )
+              \js -> liftEffect do
+                modules <- Ref.read modulesR
+                o <- evalSources modules js
+                wag' <- (runExceptT $ readProp "wag" o.evaluated)
+                  >>= either (throwError <<< error <<< show) pure
+                Ref.write o.modules modulesR
+                let wag = (unsafeCoerce :: Foreign -> AFuture) wag'
+                launchAff_ do
+                  doDownloads audioCtx bufferCache mempty identity wag
+                  liftEffect do
+                    nextWag wag
+                    st <- Ref.read playingState
+                    case st of
+                      Loading _ -> onPlay
+                      _ -> pure unit
+                    Ref.modify_ (minPlay audioCtx) playingState
 
         -- Log.info "step 4"
         --------------

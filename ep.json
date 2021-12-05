@@ -8,7 +8,7 @@
 			},
 			"hooks": {
 				"padInitToolbar": "ep_wags/serverHooks:padInitToolbar",
-				"eejsBlock_embedPopup": "ep_wags/serverHooks:eejsBlock_embedPopup",
+				"eejsBlock_editorContainerBox": "ep_wags/serverHooks:eejsBlock_editorContainerBox",
 				"eejsBlock_styles": "ep_wags/serverHooks:eejsBlock_styles"
 			}
 		}

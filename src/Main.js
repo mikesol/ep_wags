@@ -32,7 +32,7 @@ exports.postToolbarInit_ = (args) => (cb) => () => {
 				.find(".ep-wags-play")
 				.removeClass("buttonicon-play")
 				.addClass("buttonicon-cog")
-				.addClass("icon-spin")
+				.addClass("cog-spin")
 		)(() =>
 			$editBar
 				.find(".ep-wags-play")
@@ -42,7 +42,7 @@ exports.postToolbarInit_ = (args) => (cb) => () => {
 			$editBar
 				.find(".ep-wags-play")
 				.removeClass("buttonicon-cog")
-				.removeClass("icon-spin")
+				.removeClass("cog-spin")
 				.addClass("buttonicon-stop")
 		)((push) => () => {
 			awfulHack.push = push;

@@ -11,6 +11,8 @@ exports.setErrorText_ = (text) => () => {
   $wagsErrorMessage.html(text);
 }
 
+exports.sanitizeUsingRegex_ = (str) => str.replace(/[^\w\s]/gi, "");
+
 exports.postToolbarInit_ = (args) => (cb) => () => {
 	var editbar = args.toolbar;
 	const $editBar = $("#editbar");

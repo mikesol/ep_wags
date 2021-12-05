@@ -16,12 +16,12 @@ import Data.Functor (mapFlipped)
 import Data.Map as Map
 import Data.Maybe (maybe)
 import Data.Nullable (toMaybe)
+import Data.String as String
 import Data.Tuple (snd)
 import Data.Tuple.Nested ((/\))
 import Effect (Effect)
 import Effect.Aff (Aff, Fiber, Milliseconds(..), delay, killFiber, launchAff, launchAff_, makeAff, try)
 import Effect.Class (liftEffect)
-import Effect.Class.Console as Log
 import Effect.Exception (error)
 import Effect.Ref as Ref
 import Effect.Unsafe (unsafePerformEffect)
@@ -55,6 +55,19 @@ r2b r = behavior \e ->
   makeEvent \p ->
     subscribe e \f ->
       Ref.read r >>= p <<< f
+
+foreign import sanitizeUsingRegex_ :: String -> String
+
+sanitizePS :: String -> String
+sanitizePS = sanitizeUsingRegex_
+  <<< intercalate "\n"
+  <<< map
+    ( (if _ then _ else _)
+        <$> (eq "module " <<< String.take 7)
+        <*> (const "module Main where")
+        <*> identity
+    )
+  <<< String.split (String.Pattern "\n")
 
 foreign import getCurrentText_ :: Effect String
 foreign import postToolbarInit_
@@ -126,7 +139,7 @@ postToolbarInitInternal args = do
             res <- try $ makeAff \cb -> do
               removeAlert
               compile
-                { code: txt
+                { code: sanitizePS txt
                 , loader
                 , compileUrl
                 , ourFaultErrorCallback: fold

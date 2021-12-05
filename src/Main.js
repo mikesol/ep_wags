@@ -12,9 +12,9 @@ exports.setErrorText_ = (text) => () => {
 }
 
 exports.sanitizeUsingRegex_ = (str) => {
-	var highR = new RegExp("[\u0200-\uFFFF]+", "g");;
-	var b = str.replace(highR, "");
-	return b;
+	var badUCode = new RegExp("[\u00A0]+", "g");;
+	var out = str.replace(badUCode, "");
+	return out;
 }
 
 exports.postToolbarInit_ = (args) => (cb) => () => {

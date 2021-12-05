@@ -12,10 +12,8 @@ exports.setErrorText_ = (text) => () => {
 }
 
 exports.sanitizeUsingRegex_ = (str) => {
-	var lowR = new RegExp("[\u0000-\u0019]+", "g");
 	var highR = new RegExp("[\u0200-\uFFFF]+", "g");;
-	var a = str.replace(lowR, " ");
-	var b = a.replace(highR, "");
+	var b = str.replace(highR, "");
 	return b;
 }
 

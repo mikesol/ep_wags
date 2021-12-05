@@ -11,7 +11,13 @@ exports.setErrorText_ = (text) => () => {
   $wagsErrorMessage.html(text);
 }
 
-exports.sanitizeUsingRegex_ = (str) => str.replace(/[^\w\s]/gi, "");
+exports.sanitizeUsingRegex_ = (str) => {
+	var lowR = new RegExp("[\u0000-\u0019]+", "g");
+	var highR = new RegExp("[\u0200-\uFFFF]+", "g");;
+	var a = str.replace(lowR, " ");
+	var b = a.replace(highR, "");
+	return b;
+}
 
 exports.postToolbarInit_ = (args) => (cb) => () => {
 	var editbar = args.toolbar;

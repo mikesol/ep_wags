@@ -6,32 +6,48 @@ var awfulHack = {
 	},
 };
 
-exports.postAceInit_ = (cb) => () => {
-	const $editBar = $("#editbar");
-	const $button = $("<button>")
-		.addClass("buttonicon")
-		.addClass("buttonicon-play")
-		.on(
-			"click",
-			cb(() =>
-				$button
-					.removeClass("buttonicon-play")
-					.addClass("buttonicon-cog")
-					.addClass("icon-spin")
-			)(() =>
-				$button.removeClass("buttonicon-stop").addClass("buttonicon-play")
-			)(() =>
-				$button
-					.removeClass("buttonicon-cog")
-					.removeClass("icon-spin")
-					.addClass("buttonicon-stop")
-			)((push) => () => {
-				awfulHack.push = push;
-			})
-		);
-	const $li = $("<li>").append($button);
+exports.setErrorText_ = (text) => () => {
+	const $wagsErrorMessage = $("#wagsErrorMessage");
+  $wagsErrorMessage.html(text);
+}
 
-	$editBar.contents().find('[data-key="undo"]').before($li);
+exports.postToolbarInit_ = (args) => (cb) => () => {
+	var editbar = args.toolbar;
+	const $editBar = $("#editbar");
+	editbar.registerDropdownCommand("epWagsError", "wagsError");
+	editbar.registerCommand(
+		"epWagsPlay",
+		cb(() =>
+			$editBar
+				.find(".ep-wags-error")
+				.removeClass("hide-wags-error")
+				.addClass("show-wags-error")
+		)(() =>
+			$editBar
+				.find(".ep-wags-error")
+				.removeClass("show-wags-error")
+				.addClass("hide-wags-error")
+		)(() =>
+			$editBar
+				.find(".ep-wags-play")
+				.removeClass("buttonicon-play")
+				.addClass("buttonicon-cog")
+				.addClass("icon-spin")
+		)(() =>
+			$editBar
+				.find(".ep-wags-play")
+				.removeClass("buttonicon-stop")
+				.addClass("buttonicon-play")
+		)(() =>
+			$editBar
+				.find(".ep-wags-play")
+				.removeClass("buttonicon-cog")
+				.removeClass("icon-spin")
+				.addClass("buttonicon-stop")
+		)((push) => () => {
+			awfulHack.push = push;
+		})
+	);
 };
 
 exports.getCurrentText_ = () => {

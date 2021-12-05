@@ -1,11 +1,16 @@
 {
-  "parts": [
-    {
-      "name": "wags",
-      "client_hooks": {
-				"aceInitialized": "ep_wags/static/js/main:postAceInit",
+	"parts": [
+		{
+			"name": "ep_wags",
+			"client_hooks": {
+				"postToolbarInit": "ep_wags/static/js/main:postToolbarInit",
 				"acePostWriteDomLineHTML": "ep_wags/static/js/main:acePostWriteDomLineHTML"
+			},
+			"hooks": {
+				"padInitToolbar": "ep_wags/serverHooks:padInitToolbar",
+				"eejsBlock_embedPopup": "ep_wags/serverHooks:eejsBlock_embedPopup",
+				"eejsBlock_styles": "ep_wags/serverHooks:eejsBlock_styles"
 			}
-    }
-  ]
+		}
+	]
 }

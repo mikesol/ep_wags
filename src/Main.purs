@@ -1,4 +1,7 @@
-module Main (acePostWriteDomLineHTML, postAceInit) where
+module Main
+  ( acePostWriteDomLineHTML
+  , postToolbarInit
+  ) where
 
 import Prelude
 
@@ -6,18 +9,20 @@ import Control.Alt ((<|>))
 import Control.Comonad.Cofree (Cofree, mkCofree)
 import Control.Monad.Except (runExceptT, throwError)
 import Control.Promise (toAffE)
+import Data.Array (intercalate)
 import Data.Either (Either(..), either)
-import Data.Function.Uncurried (mkFn3, Fn3)
+import Data.Foldable (fold)
+import Data.Function.Uncurried (Fn2, Fn3, mkFn2, mkFn3)
+import Data.Functor (mapFlipped)
 import Data.Map as Map
-import Data.Maybe (Maybe(..))
+import Data.Maybe (maybe)
 import Data.Newtype (wrap)
+import Data.Nullable (toMaybe)
 import Data.Tuple (snd)
 import Data.Tuple.Nested ((/\))
 import Effect (Effect)
-import Effect.Aff (Aff, Fiber, Milliseconds(..), delay, killFiber, launchAff, launchAff_, makeAff, try)
+import Effect.Aff (Aff, Fiber, Milliseconds(..), delay, killFiber, launchAff, launchAff_, makeAff)
 import Effect.Class (liftEffect)
-import Effect.Class.Console as Log
-import Effect.Console (log)
 import Effect.Exception (error)
 import Effect.Ref as Ref
 import Effect.Unsafe (unsafePerformEffect)
@@ -54,8 +59,11 @@ r2b r = behavior \e ->
       Ref.read r >>= p <<< f
 
 foreign import getCurrentText_ :: Effect String
-foreign import postAceInit_
-  :: ( Effect Unit
+foreign import postToolbarInit_
+  :: Foreign
+  -> ( Effect Unit
+       -> Effect Unit
+       -> Effect Unit
        -> Effect Unit
        -> Effect Unit
        -> ((String -> Effect Unit) -> Effect Unit)
@@ -81,7 +89,7 @@ minLoading unsubscribe (Playing { audioCtx }) = Playing { unsubscribe, audioCtx 
 minPlay :: AudioContext -> PlayingState -> PlayingState
 minPlay audioCtx Stopped = Playing { audioCtx, unsubscribe: pure unit }
 minPlay audioCtx (Loading { unsubscribe }) = Playing { audioCtx, unsubscribe }
-minPlay audioCtx a = a
+minPlay _ a = a
 
 loaderUrl :: String
 loaderUrl = "https://purescript-wags.netlify.app/js/output"
@@ -91,12 +99,20 @@ compileUrl = "https://supvghemaw.eu-west-1.awsapprunner.com"
 
 loader = makeLoader loaderUrl :: Loader
 
-postAceInit :: Effect Unit
-postAceInit = do
+compileErrorsToString :: Array API.CompilerError -> String
+compileErrorsToString = intercalate "\n" <<< map \err ->
+  maybe "" (\position -> "On line " <> show position.startLine <> ":\n") (toMaybe err.position)
+    <> err.message
+    <> "\n\n"
+
+foreign import setErrorText_ :: String -> Effect Unit
+
+postToolbarInitInternal :: Foreign -> Effect Unit
+postToolbarInitInternal args = do
   modulesR <- freshModules >>= Ref.new
   bufferCache <- Ref.new Map.empty
   playingState <- Ref.new Stopped
-  postAceInit_ \onLoad onStop onPlay setAwfulHack -> Ref.read playingState >>=
+  postToolbarInit_ args \setAlert removeAlert onLoad onStop onPlay setAwfulHack -> Ref.read playingState >>=
     case _ of
       Stopped -> do
         onLoad
@@ -114,8 +130,19 @@ postAceInit = do
                 { code: txt
                 , loader
                 , compileUrl
-                , ourFaultErrorCallback: cb <<< Left
-                , yourFaultErrorCallback: cb <<< Left <<< error <<< show
+                , ourFaultErrorCallback: fold
+                    <<< mapFlipped
+                      [ setErrorText_ <<< show
+                      , cb <<< Left
+                      ]
+                    <<< (#)
+                , yourFaultErrorCallback: fold
+                    <<< mapFlipped
+                      [ setErrorText_ <<< compileErrorsToString
+                      , cb <<< Left <<< error <<< show
+                      ]
+                    <<< (#)
+
                 , successCallback: cb <<< Right <<< _.js
                 }
               mempty
@@ -143,7 +170,7 @@ postAceInit = do
 
         let
           wagEvent audioCtx = makeEvent \nextWag -> do
-            subscribe event \t -> do
+            subscribe event \_ -> do
               current <- Ref.read nextUpR
               fib <- launchAff do
                 killFiber (error "Could not kill fiber") current
@@ -169,8 +196,8 @@ postAceInit = do
           liftEffect do
             unsubscribe <- subscribe
               (run trigger world { easingAlgorithm } ffiAudio piece)
-              ( \({ res } :: Run TidalRes Analysers) -> do
-                pure unit
+              ( \(_ :: Run TidalRes Analysers) -> do
+                  pure unit
               )
             Ref.modify_ (minLoading unsubscribe) playingState
             txt <- getCurrentText_
@@ -182,6 +209,11 @@ postAceInit = do
         setAwfulHack mempty
         Ref.write Stopped playingState
         onStop
+
+postToolbarInit :: Fn2 Foreign Foreign Unit
+postToolbarInit = mkFn2
+  \_ args -> unsafePerformEffect do
+    postToolbarInitInternal args
 
 acePostWriteDomLineHTML :: Fn3 Foreign Foreign (Effect Unit) Unit
 acePostWriteDomLineHTML = mkFn3

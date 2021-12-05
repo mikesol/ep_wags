@@ -31,5 +31,8 @@
 		"bundle": "spago install && spago build && spago bundle-module --main Main --to static/js/main.js",
 		"lint": "eslint .",
 		"lint:fix": "eslint --fix ."
+	},
+	"peerDependencies": {
+		"ep_etherpad-lite": ">=1.8.6"
 	}
 }

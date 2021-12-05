@@ -1,7 +1,7 @@
 {
 	"name": "ep_wags",
 	"description": "EP Plugin for Wags. Highly invasive.",
-	"version": "0.0.2",
+	"version": "0.0.3",
 	"author": "mikesol",
 	"engines": {
 		"node": ">=10.17.1"
@@ -31,8 +31,5 @@
 		"bundle": "spago install && spago build && spago bundle-module --main Main --to static/js/main.js",
 		"lint": "eslint .",
 		"lint:fix": "eslint --fix ."
-	},
-	"peerDependencies": {
-		"ep_etherpad-lite": ">=1.8.6"
 	}
 }

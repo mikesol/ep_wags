@@ -304,7 +304,7 @@ postToolbarInitInternal args = do
                 case itype of
                   DPureScript -> crunch audioCtx txt nextWag
                   DText -> do
-                    let modText = stripComments txt
+                    let modText = stripComments $ sanitizeUsingRegex_ txt
                     let duration = fromMaybe 1.0 (getDuration modText.comments)
                     pushWagAndCarryOn audioCtx (T.make duration { earth: T.s $ String.trim modText.withoutComments }) nextWag
               Ref.write fib nextUpR

@@ -14,7 +14,7 @@ import Data.Foldable (fold)
 import Data.Function.Uncurried (Fn2, Fn3, mkFn2, mkFn3)
 import Data.Functor (mapFlipped)
 import Data.Map as Map
-import Data.Maybe (maybe)
+import Data.Maybe (maybe, Maybe(..))
 import Data.Nullable (toMaybe)
 import Data.String as String
 import Data.Tuple (snd)

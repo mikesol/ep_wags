@@ -39,6 +39,7 @@ import WAGS.Lib.Learn (Analysers, FullSceneBuilder(..))
 import WAGS.Lib.Tidal (AFuture)
 import WAGS.Lib.Tidal.Engine (engine)
 import WAGS.Lib.Tidal.Types (TidalRes)
+import WAGS.Lib.Tidal.Tidal as T
 import WAGS.Lib.Tidal.Util (doDownloads)
 import WAGS.Run (Run, run)
 import WAGS.WebAPI (AudioContext)
@@ -57,6 +58,13 @@ r2b r = behavior \e ->
       Ref.read r >>= p <<< f
 
 foreign import sanitizeUsingRegex_ :: String -> String
+
+data InputType = DPureScript | DText
+
+strToInputType :: String -> InputType
+strToInputType s
+   | String.indexOf (String.Pattern "module ") /= Nothing = DPureScript
+   | otherwise = DText
 
 sanitizePS :: String -> String
 sanitizePS = sanitizeUsingRegex_
@@ -196,7 +204,10 @@ postToolbarInitInternal args = do
                 killFiber (error "Could not kill fiber") current
                 delay (Milliseconds 400.0)
                 txt <- liftEffect getCurrentText_
-                crunch audioCtx txt nextWag
+                let itype = strToInputType txt
+                case itype of
+                  DPureScript -> crunch audioCtx txt nextWag
+                  DText -> liftEffect $ nextWag $ T.make 1.0 { earth: T.s txt }
               Ref.write fib nextUpR
 
         audioCtx <- context

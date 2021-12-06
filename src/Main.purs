@@ -312,19 +312,18 @@ postToolbarInitInternal args = do
                       modText = stripComments $ sanitizeUsingRegex_ txt
                       duration = fromMaybe 1.0 (getDuration modText.comments)
                       fut = T.make duration { earth: T.s $ String.trim modText.withoutComments }
-                    pushWagAndCarryOn audioCtx
-                      ( set
-                          ( unto TheFuture
-                              <<< prop (Proxy :: _ "earth")
-                              <<< unto Voice
-                              <<< prop (Proxy :: _ "next")
-                              <<< unto NextCycle
-                              <<< prop (Proxy :: _ "force")
-                          )
-                          true
-                          fut
-                      )
-                      nextWag
+                    {-( set
+                        ( unto TheFuture
+                            <<< prop (Proxy :: _ "earth")
+                            <<< unto Voice
+                            <<< prop (Proxy :: _ "next")
+                            <<< unto NextCycle
+                            <<< prop (Proxy :: _ "force")
+                        )
+                        true
+                        fut
+                    )-}
+                    pushWagAndCarryOn audioCtx fut nextWag
               Ref.write fib nextUpR
 
         audioCtx <- context

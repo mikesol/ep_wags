@@ -16,6 +16,9 @@ import Data.Either (Either(..), either, hush)
 import Data.Foldable (fold)
 import Data.Function.Uncurried (Fn2, Fn3, mkFn2, mkFn3)
 import Data.Functor (mapFlipped)
+import Data.Lens (set)
+import Data.Lens.Iso.Newtype (unto)
+import Data.Lens.Record (prop)
 import Data.Map as Map
 import Data.Maybe (Maybe(..), fromMaybe, maybe)
 import Data.Nullable (toMaybe)
@@ -44,13 +47,14 @@ import Text.Parsing.StringParser as Parser
 import Text.Parsing.StringParser.CodeUnits (whiteSpace, char, oneOf)
 import Text.Parsing.StringParser.CodeUnits as ParserCU
 import Text.Parsing.StringParser.Combinators (option)
+import Type.Proxy (Proxy(..))
 import Unsafe.Coerce (unsafeCoerce)
 import WAGS.Interpret (close, constant0Hack, context, contextResume, contextState, makeFFIAudioSnapshot)
 import WAGS.Lib.Learn (Analysers, FullSceneBuilder(..))
 import WAGS.Lib.Tidal (AFuture)
 import WAGS.Lib.Tidal.Engine (engine)
 import WAGS.Lib.Tidal.Tidal as T
-import WAGS.Lib.Tidal.Types (TidalRes)
+import WAGS.Lib.Tidal.Types (NextCycle(..), TheFuture(..), TidalRes, Voice(..))
 import WAGS.Lib.Tidal.Util (doDownloads)
 import WAGS.Run (Run, run)
 import WAGS.WebAPI (AudioContext)
@@ -304,9 +308,23 @@ postToolbarInitInternal args = do
                 case itype of
                   DPureScript -> crunch audioCtx txt nextWag
                   DText -> do
-                    let modText = stripComments $ sanitizeUsingRegex_ txt
-                    let duration = fromMaybe 1.0 (getDuration modText.comments)
-                    pushWagAndCarryOn audioCtx (T.make duration { earth: T.s $ String.trim modText.withoutComments }) nextWag
+                    let
+                      modText = stripComments $ sanitizeUsingRegex_ txt
+                      duration = fromMaybe 1.0 (getDuration modText.comments)
+                      fut = T.make duration { earth: T.s $ String.trim modText.withoutComments }
+                    pushWagAndCarryOn audioCtx
+                      ( set
+                          ( unto TheFuture
+                              <<< prop (Proxy :: _ "earth")
+                              <<< unto Voice
+                              <<< prop (Proxy :: _ "next")
+                              <<< unto NextCycle
+                              <<< prop (Proxy :: _ "force")
+                          )
+                          true
+                          fut
+                      )
+                      nextWag
               Ref.write fib nextUpR
 
         audioCtx <- context

@@ -63,7 +63,7 @@ data InputType = DPureScript | DText
 
 strToInputType :: String -> InputType
 strToInputType s
-   | String.indexOf (String.Pattern "module ") /= Nothing = DPureScript
+   | String.indexOf (String.Pattern "module ") s /= Nothing = DPureScript
    | otherwise = DText
 
 sanitizePS :: String -> String

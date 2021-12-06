@@ -5,18 +5,24 @@ module Main
 
 import Prelude
 
+import Control.Alt ((<|>))
 import Control.Comonad.Cofree (Cofree, mkCofree)
 import Control.Monad.Except (runExceptT, throwError)
 import Control.Promise (toAffE)
-import Data.Array (intercalate)
-import Data.Either (Either(..), either)
+import Data.Array (findMap, intercalate, (!!))
+import Data.Array as Array
+import Data.Compactable (compact)
+import Data.Either (Either(..), either, hush)
 import Data.Foldable (fold)
 import Data.Function.Uncurried (Fn2, Fn3, mkFn2, mkFn3)
 import Data.Functor (mapFlipped)
 import Data.Map as Map
-import Data.Maybe (maybe, Maybe(..))
+import Data.Maybe (Maybe(..), fromMaybe, maybe)
 import Data.Nullable (toMaybe)
+import Data.Number as DN
 import Data.String as String
+import Data.String.CodeUnits (fromCharArray)
+import Data.Traversable (sequence)
 import Data.Tuple (snd)
 import Data.Tuple.Nested ((/\))
 import Effect (Effect)
@@ -33,13 +39,18 @@ import JIT.API as API
 import JIT.Compile (compile)
 import JIT.EvalSources (evalSources, freshModules)
 import JIT.Loader (Loader, makeLoader)
+import Text.Parsing.StringParser (Parser, fail, runParser)
+import Text.Parsing.StringParser as Parser
+import Text.Parsing.StringParser.CodeUnits (whiteSpace, char, oneOf)
+import Text.Parsing.StringParser.CodeUnits as ParserCU
+import Text.Parsing.StringParser.Combinators (option)
 import Unsafe.Coerce (unsafeCoerce)
 import WAGS.Interpret (close, constant0Hack, context, contextResume, contextState, makeFFIAudioSnapshot)
 import WAGS.Lib.Learn (Analysers, FullSceneBuilder(..))
 import WAGS.Lib.Tidal (AFuture)
 import WAGS.Lib.Tidal.Engine (engine)
-import WAGS.Lib.Tidal.Types (TidalRes)
 import WAGS.Lib.Tidal.Tidal as T
+import WAGS.Lib.Tidal.Types (TidalRes)
 import WAGS.Lib.Tidal.Util (doDownloads)
 import WAGS.Run (Run, run)
 import WAGS.WebAPI (AudioContext)
@@ -63,8 +74,8 @@ data InputType = DPureScript | DText
 
 strToInputType :: String -> InputType
 strToInputType s
-   | String.indexOf (String.Pattern "module ") s /= Nothing = DPureScript
-   | otherwise = DText
+  | String.indexOf (String.Pattern "module ") s /= Nothing = DPureScript
+  | otherwise = DText
 
 sanitizePS :: String -> String
 sanitizePS = sanitizeUsingRegex_
@@ -85,7 +96,7 @@ foreign import postToolbarInit_
        -> Effect Unit
        -> Effect Unit
        -> Effect Unit
-       -> ((String -> Effect Unit) -> Effect Unit)
+       -> ((Unit -> Effect Unit) -> Effect Unit)
        -> Effect Unit
      )
   -> Effect Unit
@@ -126,6 +137,90 @@ compileErrorsToString = intercalate "\n" <<< map \err ->
 
 foreign import setErrorText_ :: String -> Effect Unit
 
+stripComment :: String -> { withoutComments :: String, comment :: Maybe String }
+stripComment = String.split (String.Pattern "#") >>> case _ of
+  [] -> { withoutComments: "", comment: Nothing }
+  [ a ] -> { withoutComments: a, comment: Nothing }
+  x -> { withoutComments: fromMaybe "" (x !! 0), comment: Just $ intercalate "#" $ Array.drop 1 x }
+
+stripComments :: String -> { withoutComments :: String, comments :: Array String }
+stripComments s = { withoutComments: intercalate "\n" (map _.withoutComments toComments), comments: compact $ map _.comment toComments }
+  where
+  toComments = map stripComment $ String.split (String.Pattern "\n") s
+
+---- uggggh
+c2str ∷ Char → Parser String
+c2str = pure <<< fromCharArray <<< Array.singleton
+
+ca2str ∷ Array Char → Parser String
+ca2str = pure <<< fromCharArray
+
+negativeSign ∷ Parser String
+negativeSign = char '-' >>= c2str
+
+digits :: Array Char
+digits = [ '0', '1', '2', '3', '4', '5', '6', '7', '8', '9' ]
+
+nonZeroDigits :: Array Char
+nonZeroDigits = [ '1', '2', '3', '4', '5', '6', '7', '8', '9' ]
+
+ip0 ∷ Parser String
+ip0 = (<>) <$> (option "" negativeSign) <*> (char '0' >>= c2str)
+
+ipOther ∷ Parser String
+ipOther =
+  fold
+    <$> sequence
+      [ option "" negativeSign
+      , oneOf nonZeroDigits >>= c2str
+      , Array.many (oneOf digits) >>= ca2str
+      ]
+
+integerPart ∷ Parser String
+integerPart = (Parser.try ip0) <|> ipOther
+
+fractionalPart ∷ Parser String
+fractionalPart =
+  (<>)
+    <$> (char '.' >>= c2str)
+    <*> (Array.many (oneOf digits) >>= ca2str)
+
+floatValueFrac ∷ Parser String
+floatValueFrac =
+  (<>)
+    <$> integerPart
+    <*> fractionalPart
+
+exponentPart ∷ Parser String
+exponentPart =
+  fold
+    <$> sequence
+      [ oneOf [ 'e', 'E' ] >>= c2str
+      , option "" (oneOf [ '+', '-' ] >>= c2str)
+      , Array.some (oneOf digits) >>= ca2str
+      ]
+
+floatValueExp ∷ Parser String
+floatValueExp = (<>) <$> integerPart <*> exponentPart
+
+floatValueFracExp ∷ Parser String
+floatValueFracExp =
+  fold
+    <$> sequence [ integerPart, fractionalPart, exponentPart ]
+
+floatValue ∷ Parser Number
+floatValue = (Parser.try floatValueFracExp <|> Parser.try floatValueExp <|> floatValueFrac) >>= maybe (fail "String not a float") pure <<< DN.fromString
+
+getDuration :: Array String -> Maybe Number
+getDuration = findMap durationParser
+  where
+  durationParser = hush <<< runParser
+    ( whiteSpace
+        *> ParserCU.string "@duration"
+        *> whiteSpace
+        *> floatValue
+    )
+
 postToolbarInitInternal :: Foreign -> Effect Unit
 postToolbarInitInternal args = do
   modulesR <- freshModules >>= Ref.new
@@ -137,15 +232,25 @@ postToolbarInitInternal args = do
         onLoad
         Ref.write (Loading { unsubscribe: pure unit }) playingState
         { event, push } <- create
-        setAwfulHack push
         nextUpR <- Ref.new (pure unit :: Fiber Unit)
         let
+          pushWagAndCarryOn :: AudioContext -> AFuture -> (AFuture -> Effect Unit) -> Aff Unit
+          pushWagAndCarryOn audioCtx wag nextWag = do
+            -- Log.info "pushing next wag"
+            doDownloads audioCtx bufferCache mempty identity wag
+            liftEffect do
+              nextWag wag
+              st <- Ref.read playingState
+              case st of
+                Loading _ -> onPlay
+                _ -> pure unit
+              Ref.modify_ (minPlay audioCtx) playingState
+
           crunch :: AudioContext -> String -> (AFuture -> Effect Unit) -> Aff Unit
           crunch audioCtx txt nextWag = do
             -- todo: can compile be fiberized to be faster?
             -- Log.info "step 1"
             res <- try $ makeAff \cb -> do
-              removeAlert
               compile
                 { code: sanitizePS txt
                 , loader
@@ -181,17 +286,7 @@ postToolbarInitInternal args = do
                   >>= either (throwError <<< error <<< show) pure
                 Ref.write o.modules modulesR
                 let wag = (unsafeCoerce :: Foreign -> AFuture) wag'
-                launchAff_ do
-                  doDownloads audioCtx bufferCache mempty identity wag
-                  liftEffect do
-                    -- Log.info "pushing next wag"
-                    nextWag wag
-                    st <- Ref.read playingState
-                    case st of
-                      Loading _ -> onPlay
-                      _ -> pure unit
-                    Ref.modify_ (minPlay audioCtx) playingState
-
+                launchAff_ $ pushWagAndCarryOn audioCtx wag nextWag
         -- Log.info "step 4"
         --------------
         --------------
@@ -203,11 +298,15 @@ postToolbarInitInternal args = do
               fib <- launchAff do
                 killFiber (error "Could not kill fiber") current
                 delay (Milliseconds 400.0)
-                txt <- liftEffect getCurrentText_
+                -- need to remove alert as well
+                txt <- liftEffect $ removeAlert *> getCurrentText_
                 let itype = strToInputType txt
                 case itype of
                   DPureScript -> crunch audioCtx txt nextWag
-                  DText -> liftEffect $ nextWag $ T.make 1.0 { earth: T.s txt }
+                  DText -> do
+                    let modText = stripComments txt
+                    let duration = fromMaybe 1.0 (getDuration modText.comments)
+                    pushWagAndCarryOn audioCtx (T.make duration { earth: T.s $ String.trim modText.withoutComments }) nextWag
               Ref.write fib nextUpR
 
         audioCtx <- context
@@ -232,8 +331,10 @@ postToolbarInitInternal args = do
                   pure unit
               )
             Ref.modify_ (minLoading unsubscribe) playingState
-            txt <- getCurrentText_
-            push txt
+            -- start the machine
+            push unit
+            -- set the pusher
+            setAwfulHack push
       Loading _ -> mempty
       Playing { audioCtx, unsubscribe } -> do
         unsubscribe

@@ -1,7 +1,7 @@
 {
 	"name": "ep_wags",
 	"description": "EP Plugin for Wags. Highly invasive.",
-	"version": "0.0.13",
+	"version": "0.0.14",
 	"author": "mikesol",
 	"engines": {
 		"node": ">=10.17.1"

@@ -16,9 +16,6 @@ import Data.Either (Either(..), either, hush)
 import Data.Foldable (fold)
 import Data.Function.Uncurried (Fn2, Fn3, mkFn2, mkFn3)
 import Data.Functor (mapFlipped)
-import Data.Lens (set)
-import Data.Lens.Iso.Newtype (unto)
-import Data.Lens.Record (prop)
 import Data.Map as Map
 import Data.Maybe (Maybe(..), fromMaybe, maybe)
 import Data.Nullable (toMaybe)
@@ -26,11 +23,12 @@ import Data.Number as DN
 import Data.String as String
 import Data.String.CodeUnits (fromCharArray)
 import Data.Traversable (sequence)
-import Data.Tuple (snd)
+import Data.Tuple (Tuple(..), snd, uncurry)
 import Data.Tuple.Nested ((/\))
 import Effect (Effect)
 import Effect.Aff (Aff, Fiber, Milliseconds(..), delay, killFiber, launchAff, launchAff_, makeAff, try)
 import Effect.Class (liftEffect)
+import Effect.Class.Console as Log
 import Effect.Exception (error)
 import Effect.Ref as Ref
 import Effect.Unsafe (unsafePerformEffect)
@@ -38,23 +36,26 @@ import FRP.Behavior (Behavior, behavior)
 import FRP.Event (create, makeEvent, subscribe)
 import Foreign (Foreign)
 import Foreign.Index (readProp)
+import Foreign.Object (Object)
+import Foreign.Object as Object
 import JIT.API as API
 import JIT.Compile (compile)
 import JIT.EvalSources (evalSources, freshModules)
 import JIT.Loader (Loader, makeLoader)
 import Text.Parsing.StringParser (Parser, fail, runParser)
 import Text.Parsing.StringParser as Parser
-import Text.Parsing.StringParser.CodeUnits (whiteSpace, char, oneOf)
+import Text.Parsing.StringParser.CodeUnits (anyDigit, anyLetter, char, oneOf, whiteSpace)
 import Text.Parsing.StringParser.CodeUnits as ParserCU
-import Text.Parsing.StringParser.Combinators (option)
-import Type.Proxy (Proxy(..))
+import Text.Parsing.StringParser.Combinators (many1, option)
 import Unsafe.Coerce (unsafeCoerce)
+import WAGS.Graph.Parameter (_just, _nothing)
 import WAGS.Interpret (close, constant0Hack, context, contextResume, contextState, makeFFIAudioSnapshot)
 import WAGS.Lib.Learn (Analysers, FullSceneBuilder(..))
 import WAGS.Lib.Tidal (AFuture)
 import WAGS.Lib.Tidal.Engine (engine)
+import WAGS.Lib.Tidal.Tidal (drone)
 import WAGS.Lib.Tidal.Tidal as T
-import WAGS.Lib.Tidal.Types (NextCycle(..), TheFuture(..), TidalRes, Voice(..))
+import WAGS.Lib.Tidal.Types (BufferUrl(..), TidalRes)
 import WAGS.Lib.Tidal.Util (doDownloads)
 import WAGS.Run (Run, run)
 import WAGS.WebAPI (AudioContext)
@@ -215,6 +216,45 @@ floatValueFracExp =
 floatValue ∷ Parser Number
 floatValue = (Parser.try floatValueFracExp <|> Parser.try floatValueExp <|> floatValueFrac) >>= maybe (fail "String not a float") pure <<< DN.fromString
 
+getSamples :: Array String -> Object BufferUrl
+getSamples = map BufferUrl
+  <<< fold
+  <<< compact
+  <<< map sampleParser
+  where
+  sampleParser =
+    (map (uncurry Object.singleton))
+      <<< hush
+      <<< runParser
+        ( Tuple
+            <$>
+              ( fromCharArray <<< Array.fromFoldable <$>
+                  ( whiteSpace
+                      *> ParserCU.string "@sample"
+                      *> whiteSpace
+                      *> many1 (Parser.try anyDigit <|> Parser.try anyLetter <|> char ':')
+                  )
+              )
+            <*>
+              ( fromCharArray <<< Array.fromFoldable <$>
+                  ( whiteSpace
+                      *> many1 (Parser.try anyDigit <|> Parser.try anyLetter <|> oneOf [ ':', '\\', '/', '@', '#', '%', '.', '-', '_' ])
+                  )
+              )
+        )
+
+getDrone :: Array String -> Maybe String
+getDrone = findMap droneParser
+  where
+  droneParser = hush <<< runParser
+    ( fromCharArray <<< Array.fromFoldable <$>
+        ( whiteSpace
+            *> ParserCU.string "@drone"
+            *> whiteSpace
+            *> many1 (Parser.try anyDigit <|> Parser.try anyLetter <|> char ':')
+        )
+    )
+
 getDuration :: Array String -> Maybe Number
 getDuration = findMap durationParser
   where
@@ -311,18 +351,15 @@ postToolbarInitInternal args = do
                     let
                       modText = stripComments $ sanitizeUsingRegex_ txt
                       duration = fromMaybe 1.0 (getDuration modText.comments)
-                      fut = T.make duration { earth: T.s $ String.trim modText.withoutComments }
-                    {-( set
-                        ( unto TheFuture
-                            <<< prop (Proxy :: _ "earth")
-                            <<< unto Voice
-                            <<< prop (Proxy :: _ "next")
-                            <<< unto NextCycle
-                            <<< prop (Proxy :: _ "force")
-                        )
-                        true
-                        fut
-                    )-}
+                      samples = getSamples modText.comments
+                      drone' = maybe _nothing _just
+                        $ getDrone modText.comments
+                      fut = T.make duration
+                        { earth: T.s
+                            $ String.trim modText.withoutComments
+                        , sounds: samples
+                        , heart: join $ map drone drone'
+                        }
                     pushWagAndCarryOn audioCtx fut nextWag
               Ref.write fib nextUpR
 

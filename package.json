@@ -11,6 +11,7 @@
 		"url": "https://github.com/mikesol/etherpad-lite.git"
 	},
 	"devDependencies": {
+		"eslint": "^8.4.1",
 		"purescript": "^0.14.5",
 		"purs-tidy": "^0.6.3",
 		"spago": "^0.20.3"

@@ -1,6 +1,7 @@
 module Main
   ( acePostWriteDomLineHTML
   , postToolbarInit
+  , aceKeyEvent
   ) where
 
 import Prelude
@@ -28,12 +29,11 @@ import Data.Tuple.Nested ((/\))
 import Effect (Effect)
 import Effect.Aff (Aff, Fiber, Milliseconds(..), delay, killFiber, launchAff, launchAff_, makeAff, try)
 import Effect.Class (liftEffect)
-import Effect.Class.Console as Log
 import Effect.Exception (error)
 import Effect.Ref as Ref
 import Effect.Unsafe (unsafePerformEffect)
 import FRP.Behavior (Behavior, behavior)
-import FRP.Event (create, makeEvent, subscribe)
+import FRP.Event (Event, create, makeEvent, subscribe)
 import Foreign (Foreign)
 import Foreign.Index (readProp)
 import Foreign.Object (Object)
@@ -104,10 +104,11 @@ foreign import postToolbarInit_
        -> ((Unit -> Effect Unit) -> Effect Unit)
        -> Effect Unit
      )
-  -> Effect Unit
+  -> Effect (Effect Unit)
 
 foreign import getAwfulHack_ :: Effect (Unit -> Effect Unit)
-
+foreign import getPlayKey_ :: Effect (Unit -> Effect Unit)
+foreign import setPlayKey_ :: (Unit -> Effect Unit) -> Effect Unit
 data PlayingState
   = Playing
       { audioCtx :: AudioContext
@@ -265,12 +266,12 @@ getDuration = findMap durationParser
         *> floatValue
     )
 
-postToolbarInitInternal :: Foreign -> Effect Unit
-postToolbarInitInternal args = do
+postToolbarInitInternal :: Event Unit -> Foreign -> Effect Unit
+postToolbarInitInternal ctrlPEvt args = do
   modulesR <- freshModules >>= Ref.new
   bufferCache <- Ref.new Map.empty
   playingState <- Ref.new Stopped
-  postToolbarInit_ args \setAlert removeAlert onLoad onStop onPlay setAwfulHack -> Ref.read playingState >>=
+  cb <- postToolbarInit_ args \setAlert removeAlert onLoad onStop onPlay setAwfulHack -> Ref.read playingState >>=
     case _ of
       Stopped -> do
         onLoad
@@ -396,11 +397,33 @@ postToolbarInitInternal args = do
         setAwfulHack mempty
         Ref.write Stopped playingState
         onStop
+  -- never unsubscribe from key event for now
+  -- change later?
+  _ <- subscribe ctrlPEvt \_ -> do
+    -- Log.info "playing"
+    cb
+  pure unit
+
+foreign import wireUpCtrlP_ :: (Unit -> Effect Unit) -> Effect Unit
 
 postToolbarInit :: Fn2 Foreign Foreign Unit
 postToolbarInit = mkFn2
   \_ args -> unsafePerformEffect do
-    postToolbarInitInternal args
+    { event, push } <- create
+    wireUpCtrlP_ push
+    setPlayKey_ push
+    postToolbarInitInternal event args
+
+foreign import isCtrlG :: Foreign -> Effect Boolean
+
+aceKeyEvent :: Fn2 Foreign Foreign Boolean
+aceKeyEvent = mkFn2
+  \_ args -> unsafePerformEffect do
+    icg <- isCtrlG args
+    when (icg) do
+      hack <- getPlayKey_
+      hack unit
+    pure icg
 
 acePostWriteDomLineHTML :: Fn3 Foreign Foreign (Effect Unit) Unit
 acePostWriteDomLineHTML = mkFn3

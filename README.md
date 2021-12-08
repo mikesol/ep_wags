@@ -4,6 +4,8 @@
 
 Etherpad plugin for `purescript-wags`.
 
+[Check it out](https://yap.wags.fm)!
+
 # License
 
 This package is under the Apache-2.0 license. See [LICENSE](./LICENSE).

@@ -1,1 +1,3 @@
 static/js/main.js
+output/**/*.js
+.spago/**/*.js

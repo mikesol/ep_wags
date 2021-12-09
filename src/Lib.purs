@@ -1,7 +1,10 @@
-module Main
+module Lib
   ( acePostWriteDomLineHTML
   , postToolbarInit
   , aceKeyEvent
+  , initF
+  , InitSig
+  , PlayingState(..)
   ) where
 
 import Prelude
@@ -40,7 +43,7 @@ import Foreign.Object (Object)
 import Foreign.Object as Object
 import JIT.API as API
 import JIT.Compile (compile)
-import JIT.EvalSources (evalSources, freshModules)
+import JIT.EvalSources (Modules, evalSources, freshModules)
 import JIT.Loader (Loader, makeLoader)
 import Text.Parsing.StringParser (Parser, fail, runParser)
 import Text.Parsing.StringParser as Parser
@@ -55,7 +58,7 @@ import WAGS.Lib.Tidal (AFuture)
 import WAGS.Lib.Tidal.Engine (engine)
 import WAGS.Lib.Tidal.Tidal (drone)
 import WAGS.Lib.Tidal.Tidal as T
-import WAGS.Lib.Tidal.Types (BufferUrl(..), TidalRes)
+import WAGS.Lib.Tidal.Types (BufferUrl(..), TidalRes, SampleCache)
 import WAGS.Lib.Tidal.Util (doDownloads)
 import WAGS.Run (Run, run)
 import WAGS.WebAPI (AudioContext)
@@ -93,18 +96,17 @@ sanitizePS = sanitizeUsingRegex_
     )
   <<< String.split (String.Pattern "\n")
 
+type InitSig =
+  Effect Unit
+  -> Effect Unit
+  -> Effect Unit
+  -> Effect Unit
+  -> Effect Unit
+  -> ((Unit -> Effect Unit) -> Effect Unit)
+  -> Effect Unit
+
 foreign import getCurrentText_ :: Effect String
-foreign import postToolbarInit_
-  :: Foreign
-  -> ( Effect Unit
-       -> Effect Unit
-       -> Effect Unit
-       -> Effect Unit
-       -> Effect Unit
-       -> ((Unit -> Effect Unit) -> Effect Unit)
-       -> Effect Unit
-     )
-  -> Effect (Effect Unit)
+foreign import postToolbarInit_ :: Foreign -> InitSig -> Effect (Effect Unit)
 
 foreign import getAwfulHack_ :: Effect (Unit -> Effect Unit)
 foreign import getPlayKey_ :: Effect (Unit -> Effect Unit)
@@ -266,137 +268,148 @@ getDuration = findMap durationParser
         *> floatValue
     )
 
-postToolbarInitInternal :: Event Unit -> Foreign -> Effect Unit
-postToolbarInitInternal ctrlPEvt args = do
-  modulesR <- freshModules >>= Ref.new
-  bufferCache <- Ref.new Map.empty
-  playingState <- Ref.new Stopped
-  cb <- postToolbarInit_ args \setAlert removeAlert onLoad onStop onPlay setAwfulHack -> Ref.read playingState >>=
-    case _ of
-      Stopped -> do
-        onLoad
-        Ref.write (Loading { unsubscribe: pure unit }) playingState
-        { event, push } <- create
-        nextUpR <- Ref.new (pure unit :: Fiber Unit)
-        let
-          pushWagAndCarryOn :: AudioContext -> AFuture -> (AFuture -> Effect Unit) -> Aff Unit
-          pushWagAndCarryOn audioCtx wag nextWag = do
-            -- Log.info "pushing next wag"
-            doDownloads audioCtx bufferCache mempty identity wag
-            liftEffect do
-              nextWag wag
-              st <- Ref.read playingState
-              case st of
-                Loading _ -> onPlay
-                _ -> pure unit
-              Ref.modify_ (minPlay audioCtx) playingState
+initF
+  :: Ref.Ref PlayingState
+  -> Ref.Ref SampleCache
+  -> Ref.Ref Modules
+  -> Aff Unit
+  -> Effect String
+  -> InitSig
+initF playingState bufferCache modulesR checkForAuthorization gcText setAlert removeAlert onLoad onStop onPlay setAwfulHack = Ref.read playingState >>=
+  case _ of
+    Stopped -> do
+      onLoad
+      Ref.write (Loading { unsubscribe: pure unit }) playingState
+      { event, push } <- create
+      nextUpR <- Ref.new (pure unit :: Fiber Unit)
+      let
+        pushWagAndCarryOn :: AudioContext -> AFuture -> (AFuture -> Effect Unit) -> Aff Unit
+        pushWagAndCarryOn audioCtx wag nextWag = do
+          -- Log.info "pushing next wag"
+          doDownloads audioCtx bufferCache mempty identity wag
+          liftEffect do
+            nextWag wag
+            st <- Ref.read playingState
+            case st of
+              Loading _ -> onPlay
+              _ -> pure unit
+            Ref.modify_ (minPlay audioCtx) playingState
 
-          crunch :: AudioContext -> String -> (AFuture -> Effect Unit) -> Aff Unit
-          crunch audioCtx txt nextWag = do
-            -- todo: can compile be fiberized to be faster?
-            -- Log.info "step 1"
-            res <- try $ makeAff \cb -> do
-              compile
-                { code: sanitizePS txt
-                , loader
-                , compileUrl
-                , ourFaultErrorCallback: fold
-                    <<< mapFlipped
-                      [ setErrorText_ <<< show
-                      , cb <<< Left
-                      ]
-                    <<< (#)
-                , yourFaultErrorCallback: fold
-                    <<< mapFlipped
-                      [ setErrorText_ <<< compileErrorsToString
-                      , cb <<< Left <<< error <<< show
-                      ]
-                    <<< (#)
+        crunch :: AudioContext -> String -> (AFuture -> Effect Unit) -> Aff Unit
+        crunch audioCtx txt nextWag = do
+          -- todo: can compile be fiberized to be faster?
+          -- Log.info "step 1"
+          res <- try $ makeAff \cb -> do
+            compile
+              { code: sanitizePS txt
+              , loader
+              , compileUrl
+              , ourFaultErrorCallback: fold
+                  <<< mapFlipped
+                    [ setErrorText_ <<< show
+                    , cb <<< Left
+                    ]
+                  <<< (#)
+              , yourFaultErrorCallback: fold
+                  <<< mapFlipped
+                    [ setErrorText_ <<< compileErrorsToString
+                    , cb <<< Left <<< error <<< show
+                    ]
+                  <<< (#)
 
-                , successCallback: cb <<< Right <<< _.js
-                }
-              mempty
-            -- Log.info "step 2"
-            res # either
-              ( \_ -> liftEffect do
-                  setAlert
-                  -- in case we are not playing yet
-                  -- we set on play
-                  onPlay
-              )
-              \js -> liftEffect do
-                modules <- Ref.read modulesR
-                o <- evalSources modules js
-                wag' <- (runExceptT $ readProp "wag" o.evaluated)
-                  >>= either (throwError <<< error <<< show) pure
-                Ref.write o.modules modulesR
-                let wag = (unsafeCoerce :: Foreign -> AFuture) wag'
-                launchAff_ $ pushWagAndCarryOn audioCtx wag nextWag
-        -- Log.info "step 4"
-        --------------
-        --------------
+              , successCallback: cb <<< Right <<< _.js
+              }
+            mempty
+          -- Log.info "step 2"
+          res # either
+            ( \_ -> liftEffect do
+                setAlert
+                -- in case we are not playing yet
+                -- we set on play
+                onPlay
+            )
+            \js -> liftEffect do
+              modules <- Ref.read modulesR
+              o <- evalSources modules js
+              wag' <- (runExceptT $ readProp "wag" o.evaluated)
+                >>= either (throwError <<< error <<< show) pure
+              Ref.write o.modules modulesR
+              let wag = (unsafeCoerce :: Foreign -> AFuture) wag'
+              launchAff_ $ pushWagAndCarryOn audioCtx wag nextWag
+      -- Log.info "step 4"
+      --------------
+      --------------
 
-        let
-          wagEvent audioCtx = makeEvent \nextWag -> do
-            subscribe event \_ -> do
-              current <- Ref.read nextUpR
-              fib <- launchAff do
-                killFiber (error "Could not kill fiber") current
-                delay (Milliseconds 400.0)
-                -- need to remove alert as well
-                txt <- liftEffect $ removeAlert *> getCurrentText_
-                let itype = strToInputType txt
-                case itype of
-                  DPureScript -> crunch audioCtx txt nextWag
-                  DText -> do
-                    let
-                      modText = stripComments $ sanitizeUsingRegex_ txt
-                      duration = fromMaybe 1.0 (getDuration modText.comments)
-                      samples = getSamples modText.comments
-                      drone' = maybe _nothing _just
-                        $ getDrone modText.comments
-                      fut = T.make duration
-                        { earth: T.s
-                            $ String.trim modText.withoutComments
-                        , sounds: samples
-                        , heart: join $ map drone drone'
-                        }
-                    pushWagAndCarryOn audioCtx fut nextWag
-              Ref.write fib nextUpR
+      let
+        wagEvent audioCtx = makeEvent \nextWag -> do
+          subscribe event \_ -> do
+            current <- Ref.read nextUpR
+            fib <- launchAff do
+              killFiber (error "Could not kill fiber") current
+              delay (Milliseconds 400.0)
+              -- need to remove alert as well
+              txt <- liftEffect $ removeAlert *> gcText
+              let itype = strToInputType txt
+              case itype of
+                DPureScript -> crunch audioCtx txt nextWag
+                DText -> do
+                  let
+                    modText = stripComments $ sanitizeUsingRegex_ txt
+                    duration = fromMaybe 1.0 (getDuration modText.comments)
+                    samples = getSamples modText.comments
+                    drone' = maybe _nothing _just
+                      $ getDrone modText.comments
+                    fut = T.make duration
+                      { earth: T.s
+                          $ String.trim modText.withoutComments
+                      , sounds: samples
+                      , heart: join $ map drone drone'
+                      }
+                  pushWagAndCarryOn audioCtx fut nextWag
+            Ref.write fib nextUpR
 
-        audioCtx <- context
+      launchAff_ do
+        checkForAuthorization
+        audioCtx <- liftEffect $ context
         waStatus <- liftEffect $ contextState audioCtx
         -- void the constant 0 hack
         -- this will result in a very slight performance decrease but makes iOS and Mac more sure
         _ <- liftEffect $ constant0Hack audioCtx
         ffiAudio <- liftEffect $ makeFFIAudioSnapshot audioCtx
-        launchAff_ do
-          when (waStatus /= "running") (toAffE $ contextResume audioCtx)
-          let
-            FullSceneBuilder { triggerWorld, piece } =
-              engine
-                (pure unit)
-                (map (const <<< const) (wagEvent audioCtx))
-                (Left (r2b bufferCache))
-          trigger /\ world <- snd $ triggerWorld (audioCtx /\ (pure (pure {} /\ pure {})))
-          liftEffect do
-            unsubscribe <- subscribe
-              (run trigger world { easingAlgorithm } ffiAudio piece)
-              ( \(_ :: Run TidalRes Analysers) -> do
-                  pure unit
-              )
-            Ref.modify_ (minLoading unsubscribe) playingState
-            -- start the machine
-            push unit
-            -- set the pusher
-            setAwfulHack push
-      Loading _ -> mempty
-      Playing { audioCtx, unsubscribe } -> do
-        unsubscribe
-        close audioCtx
-        setAwfulHack mempty
-        Ref.write Stopped playingState
-        onStop
+        when (waStatus /= "running") (toAffE $ contextResume audioCtx)
+        let
+          FullSceneBuilder { triggerWorld, piece } =
+            engine
+              (pure unit)
+              (map (const <<< const) (wagEvent audioCtx))
+              (Left (r2b bufferCache))
+        trigger /\ world <- snd $ triggerWorld (audioCtx /\ (pure (pure {} /\ pure {})))
+        liftEffect do
+          unsubscribe <- subscribe
+            (run trigger world { easingAlgorithm } ffiAudio piece)
+            ( \(_ :: Run TidalRes Analysers) -> do
+                pure unit
+            )
+          Ref.modify_ (minLoading unsubscribe) playingState
+          -- start the machine
+          push unit
+          -- set the pusher
+          setAwfulHack push
+    Loading _ -> mempty
+    Playing { audioCtx, unsubscribe } -> do
+      unsubscribe
+      close audioCtx
+      setAwfulHack mempty
+      Ref.write Stopped playingState
+      onStop
+
+postToolbarInitInternal :: Event Unit -> Foreign -> Effect Unit
+postToolbarInitInternal ctrlPEvt args = do
+  modulesR <- freshModules >>= Ref.new
+  bufferCache <- Ref.new Map.empty
+  playingState <- Ref.new Stopped
+  cb <- postToolbarInit_ args
+    (initF playingState bufferCache modulesR (pure unit) getCurrentText_)
   -- never unsubscribe from key event for now
   -- change later?
   _ <- subscribe ctrlPEvt \_ -> do

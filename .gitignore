@@ -13,6 +13,7 @@ npm-debug.log
 /.purs*
 /.psa*
 /.spago
+/miro
 /static/js/main.js
 /dist
 /scripts/.venv

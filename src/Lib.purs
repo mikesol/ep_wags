@@ -51,7 +51,7 @@ import Text.Parsing.StringParser.CodeUnits (anyDigit, anyLetter, char, oneOf, wh
 import Text.Parsing.StringParser.CodeUnits as ParserCU
 import Text.Parsing.StringParser.Combinators (many1, option)
 import Unsafe.Coerce (unsafeCoerce)
-import WAGS.Graph.Parameter (_just, _nothing)
+import Data.Variant.Maybe (just, nothing)
 import WAGS.Interpret (close, constant0Hack, context, contextResume, contextState, makeFFIAudioSnapshot)
 import WAGS.Lib.Learn (Analysers, FullSceneBuilder(..))
 import WAGS.Lib.Tidal (AFuture)
@@ -357,7 +357,7 @@ initF playingState bufferCache modulesR checkForAuthorization gcText setAlert re
                     modText = stripComments $ sanitizeUsingRegex_ txt
                     duration = fromMaybe 1.0 (getDuration modText.comments)
                     samples = getSamples modText.comments
-                    drone' = maybe _nothing _just
+                    drone' = maybe nothing just
                       $ getDrone modText.comments
                     fut = T.make duration
                       { earth: T.s

@@ -15,6 +15,7 @@
   , "effect"
   , "either"
   , "event"
+  , "everythings-better-with-variants"
   , "exceptions"
   , "filterable"
   , "foldable-traversable"

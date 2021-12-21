@@ -65,7 +65,9 @@ exports.postToolbarInit_ = (args) => (cb) => () => {
 	)((push) => () => {
 		awfulHack.push = push;
 	});
-	editbar.registerCommand("epWagsPlay", f);
+	// does not work in safari
+	//////editbar.registerCommand("epWagsPlay", f);
+	$editBar.find(".ep-wags-play").click(f);
 	return f;
 };
 

@@ -29,7 +29,7 @@ import Data.String.CodeUnits (fromCharArray)
 import Data.Traversable (sequence)
 import Data.Tuple (Tuple(..), snd, uncurry)
 import Data.Tuple.Nested ((/\))
-import Data.Variant.Maybe (just, nothing)
+import Data.Variant.Maybe as VM
 import Effect (Effect)
 import Effect.Aff (Aff, Fiber, Milliseconds(..), delay, killFiber, launchAff, launchAff_, makeAff, try)
 import Effect.Class (liftEffect)
@@ -56,10 +56,12 @@ import Unsafe.Coerce (unsafeCoerce)
 import WAGS.Interpret (close, constant0Hack, context, contextResume, contextState, makeFFIAudioSnapshot)
 import WAGS.Lib.Learn (Analysers, FullSceneBuilder(..))
 import WAGS.Lib.Tidal (AFuture)
+import WAGS.Lib.Tidal.Cycle (bd)
 import WAGS.Lib.Tidal.Engine (engine)
-import WAGS.Lib.Tidal.Tidal (drone)
+import WAGS.Lib.Tidal.Tidal (drone, parseWithBrackets)
 import WAGS.Lib.Tidal.Tidal as T
 import WAGS.Lib.Tidal.Types (BufferUrl(..), TidalRes, SampleCache)
+import WAGS.Lib.Tidal.Types as TT
 import WAGS.Lib.Tidal.Util (doDownloads)
 import WAGS.Run (Run, run)
 import WAGS.WebAPI (AudioContext)
@@ -269,21 +271,22 @@ getDuration = findMap durationParser
         *> floatValue
     )
 
-{-
-parse :: forall event. String -> Cycle (VM.Maybe (Note event))
-parse = fromMaybe intentionalSilenceForInternalUseOnly_
+
+parseUsingDefault :: forall event. T.Cycle (VM.Maybe (TT.Note event)) -> String -> T.Cycle (VM.Maybe (TT.Note event))
+parseUsingDefault d = fromMaybe d
   <<< hush
   <<< parseWithBrackets
--}
+
 
 initF
-  :: Ref.Ref PlayingState
+  :: Ref.Ref (T.Cycle (VM.Maybe (TT.Note Unit)))
+  -> Ref.Ref PlayingState
   -> Ref.Ref SampleCache
   -> Ref.Ref Modules
   -> Aff Unit
   -> Effect String
   -> InitSig
-initF playingState bufferCache modulesR checkForAuthorization gcText setAlert removeAlert onLoad onStop onPlay setAwfulHack = Ref.read playingState >>=
+initF cycleRef playingState bufferCache modulesR checkForAuthorization gcText setAlert removeAlert onLoad onStop onPlay setAwfulHack = Ref.read playingState >>=
   case _ of
     Stopped -> do
       onLoad
@@ -361,18 +364,20 @@ initF playingState bufferCache modulesR checkForAuthorization gcText setAlert re
               case itype of
                 DPureScript -> crunch audioCtx txt nextWag
                 DText -> do
+                  prevCyc <- liftEffect $ Ref.read cycleRef
                   let
                     modText = stripComments $ sanitizeUsingRegex_ txt
                     duration = fromMaybe 1.0 (getDuration modText.comments)
                     samples = getSamples modText.comments
-                    drone' = maybe nothing just
+                    drone' = maybe VM.nothing VM.just
                       $ getDrone modText.comments
+                    newCyc = parseUsingDefault prevCyc (String.trim modText.withoutComments)
                     fut = T.make duration
-                      { earth: T.s
-                          $ String.trim modText.withoutComments
+                      { earth: T.s newCyc
                       , sounds: samples
                       , heart: join $ map drone drone'
                       }
+                  liftEffect $ Ref.write newCyc cycleRef
                   pushWagAndCarryOn audioCtx fut nextWag
             Ref.write fib nextUpR
 
@@ -423,8 +428,9 @@ postToolbarInitInternal ctrlPEvt args = do
   modulesR <- freshModules >>= Ref.new
   bufferCache <- Ref.new Map.empty
   playingState <- Ref.new Stopped
+  cycleRef <- Ref.new bd
   cb <- postToolbarInit_ args
-    (initF playingState bufferCache modulesR (pure unit) getCurrentText_)
+    (initF cycleRef playingState bufferCache modulesR (pure unit) getCurrentText_)
   -- never unsubscribe from key event for now
   -- change later?
   _ <- subscribe ctrlPEvt \_ -> do

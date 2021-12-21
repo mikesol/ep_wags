@@ -14,6 +14,7 @@ import Effect.Class (liftEffect)
 import Effect.Ref as Ref
 import JIT.EvalSources (freshModules)
 import Lib (PlayingState(..), InitSig, initF)
+import WAGS.Lib.Tidal.Cycle (bd)
 
 foreign import miroOnReady :: Effect Unit -> InitSig -> (Error -> Effect Unit) -> (Unit -> Effect Unit) -> Effect Unit
 
@@ -43,9 +44,10 @@ main = do
   modulesR <- freshModules >>= Ref.new
   bufferCache <- Ref.new Map.empty
   playingState <- Ref.new Stopped
+  cycleRef <- Ref.new bd
   txtRf <- Ref.new ""
   let
-    onClick = initF playingState bufferCache modulesR
+    onClick = initF cycleRef playingState bufferCache modulesR
       ( do
           ia <- toAffE isAuthorized
           when (not ia) do

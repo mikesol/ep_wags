@@ -29,9 +29,11 @@ import Data.String.CodeUnits (fromCharArray)
 import Data.Traversable (sequence)
 import Data.Tuple (Tuple(..), snd, uncurry)
 import Data.Tuple.Nested ((/\))
+import Data.Variant.Maybe (just, nothing)
 import Effect (Effect)
 import Effect.Aff (Aff, Fiber, Milliseconds(..), delay, killFiber, launchAff, launchAff_, makeAff, try)
 import Effect.Class (liftEffect)
+import Effect.Class.Console as Log
 import Effect.Exception (error)
 import Effect.Ref as Ref
 import Effect.Unsafe (unsafePerformEffect)
@@ -51,7 +53,6 @@ import Text.Parsing.StringParser.CodeUnits (anyDigit, anyLetter, char, oneOf, wh
 import Text.Parsing.StringParser.CodeUnits as ParserCU
 import Text.Parsing.StringParser.Combinators (many1, option)
 import Unsafe.Coerce (unsafeCoerce)
-import Data.Variant.Maybe (just, nothing)
 import WAGS.Interpret (close, constant0Hack, context, contextResume, contextState, makeFFIAudioSnapshot)
 import WAGS.Lib.Learn (Analysers, FullSceneBuilder(..))
 import WAGS.Lib.Tidal (AFuture)
@@ -268,6 +269,13 @@ getDuration = findMap durationParser
         *> floatValue
     )
 
+{-
+parse :: forall event. String -> Cycle (VM.Maybe (Note event))
+parse = fromMaybe intentionalSilenceForInternalUseOnly_
+  <<< hush
+  <<< parseWithBrackets
+-}
+
 initF
   :: Ref.Ref PlayingState
   -> Ref.Ref SampleCache
@@ -369,32 +377,39 @@ initF playingState bufferCache modulesR checkForAuthorization gcText setAlert re
             Ref.write fib nextUpR
 
       launchAff_ do
-        checkForAuthorization
-        audioCtx <- liftEffect $ context
-        waStatus <- liftEffect $ contextState audioCtx
-        -- void the constant 0 hack
-        -- this will result in a very slight performance decrease but makes iOS and Mac more sure
-        _ <- liftEffect $ constant0Hack audioCtx
-        ffiAudio <- liftEffect $ makeFFIAudioSnapshot audioCtx
-        when (waStatus /= "running") (toAffE $ contextResume audioCtx)
-        let
-          FullSceneBuilder { triggerWorld, piece } =
-            engine
-              (pure unit)
-              (map (const <<< const) (wagEvent audioCtx))
-              (Left (r2b bufferCache))
-        trigger /\ world <- snd $ triggerWorld (audioCtx /\ (pure (pure {} /\ pure {})))
-        liftEffect do
-          unsubscribe <- subscribe
-            (run trigger world { easingAlgorithm } ffiAudio piece)
-            ( \(_ :: Run TidalRes Analysers) -> do
-                pure unit
-            )
-          Ref.modify_ (minLoading unsubscribe) playingState
-          -- start the machine
-          push unit
-          -- set the pusher
-          setAwfulHack push
+        resultOfThing <- try do
+            checkForAuthorization
+            audioCtx <- liftEffect $ context
+            waStatus <- liftEffect $ contextState audioCtx
+            -- void the constant 0 hack
+            -- this will result in a very slight performance decrease but makes iOS and Mac more sure
+            ffiAudio <- liftEffect $ makeFFIAudioSnapshot audioCtx
+            when (waStatus /= "running") (toAffE $ contextResume audioCtx)
+            _ <- liftEffect $ constant0Hack audioCtx
+            let
+              FullSceneBuilder { triggerWorld, piece } =
+                engine
+                  (pure unit)
+                  (map (const <<< const) (wagEvent audioCtx))
+                  (Left (r2b bufferCache))
+            trigger /\ world <- snd $ triggerWorld (audioCtx /\ (pure (pure {} /\ pure {})))
+            liftEffect do
+              unsubscribe <- subscribe
+                (run trigger world { easingAlgorithm } ffiAudio piece)
+                ( \(_ :: Run TidalRes Analysers) -> do
+                    pure unit
+                )
+              Ref.modify_ (minLoading unsubscribe) playingState
+              -- start the machine
+              push unit
+              -- set the pusher
+              setAwfulHack push
+        case resultOfThing of
+          Left err -> do
+            Log.error "PLAY AFF FAILED"
+            Log.error (show err)
+            throwError err
+          Right _ -> pure unit
     Loading _ -> mempty
     Playing { audioCtx, unsubscribe } -> do
       unsubscribe

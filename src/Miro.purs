@@ -6,7 +6,7 @@ import Control.Promise (Promise, toAffE)
 import Data.Array (find)
 import Data.Either (Either(..))
 import Data.Foldable (for_)
-import Data.Map as Map
+import Foreign.Object as Object
 import Data.String (Pattern(..), contains)
 import Effect (Effect)
 import Effect.Aff (Error, launchAff_, makeAff)
@@ -42,7 +42,7 @@ selectionHandler rf = launchAff_ do
 main :: Effect Unit
 main = do
   modulesR <- freshModules >>= Ref.new
-  bufferCache <- Ref.new Map.empty
+  bufferCache <- Ref.new Object.empty
   playingState <- Ref.new Stopped
   cycleRef <- Ref.new bd
   txtRf <- Ref.new ""

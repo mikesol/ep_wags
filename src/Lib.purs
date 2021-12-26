@@ -20,7 +20,6 @@ import Data.Either (Either(..), either, hush)
 import Data.Foldable (fold)
 import Data.Function.Uncurried (Fn2, Fn3, mkFn2, mkFn3)
 import Data.Functor (mapFlipped)
-import Data.Map as Map
 import Data.Maybe (Maybe(..), fromMaybe, maybe)
 import Data.Nullable (toMaybe)
 import Data.Number as DN
@@ -426,7 +425,7 @@ initF cycleRef playingState bufferCache modulesR checkForAuthorization gcText se
 postToolbarInitInternal :: Event Unit -> Foreign -> Effect Unit
 postToolbarInitInternal ctrlPEvt args = do
   modulesR <- freshModules >>= Ref.new
-  bufferCache <- Ref.new Map.empty
+  bufferCache <- Ref.new Object.empty
   playingState <- Ref.new Stopped
   cycleRef <- Ref.new bd
   cb <- postToolbarInit_ args

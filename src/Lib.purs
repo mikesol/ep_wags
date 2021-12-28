@@ -10,6 +10,7 @@ module Lib
 import Prelude
 
 import Control.Alt ((<|>))
+import Unmute (unmute)
 import Control.Comonad.Cofree (Cofree, mkCofree)
 import Control.Monad.Except (runExceptT, throwError)
 import Control.Promise (toAffE)
@@ -384,6 +385,7 @@ initF cycleRef playingState bufferCache modulesR checkForAuthorization gcText se
         resultOfThing <- try do
             checkForAuthorization
             audioCtx <- liftEffect $ context
+            liftEffect $ unmute audioCtx false false
             waStatus <- liftEffect $ contextState audioCtx
             -- void the constant 0 hack
             -- this will result in a very slight performance decrease but makes iOS and Mac more sure
@@ -416,8 +418,8 @@ initF cycleRef playingState bufferCache modulesR checkForAuthorization gcText se
           Right _ -> pure unit
     Loading _ -> mempty
     Playing { audioCtx, unsubscribe } -> do
-      unsubscribe
       close audioCtx
+      unsubscribe
       setAwfulHack mempty
       Ref.write Stopped playingState
       onStop

@@ -6,6 +6,10 @@ Etherpad plugin for `purescript-wags`.
 
 [Check it out](https://yap.wags.fm)!
 
+# iOS unmute hack
+
+Uses [unmute](https://github.com/swevans/unmute).
+
 # License
 
 This package is under the Apache-2.0 license. See [LICENSE](./LICENSE).

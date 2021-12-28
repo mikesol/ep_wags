@@ -4,6 +4,7 @@ import Prelude
 
 import Control.Promise (Promise, toAffE)
 import Data.Array (find)
+import Data.Maybe (Maybe(..))
 import Data.Either (Either(..))
 import Data.Foldable (for_)
 import Foreign.Object as Object
@@ -45,9 +46,10 @@ main = do
   bufferCache <- Ref.new Object.empty
   playingState <- Ref.new Stopped
   cycleRef <- Ref.new bd
+  htmlAudio <- Ref.new Nothing
   txtRf <- Ref.new ""
   let
-    onClick = initF cycleRef playingState bufferCache modulesR
+    onClick = initF htmlAudio cycleRef playingState bufferCache modulesR
       ( do
           ia <- toAffE isAuthorized
           when (not ia) do

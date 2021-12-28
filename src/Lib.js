@@ -13,12 +13,12 @@ const playKey = {
 };
 
 exports.wireUpCtrlP_ = (push) => () => {
-  document.addEventListener("keydown", function (event) {
+	document.addEventListener("keydown", function (event) {
 		if (event.ctrlKey && event.key === "g") {
 			push()();
 		}
 	});
-}
+};
 
 exports.setErrorText_ = (text) => () => {
 	const $wagsErrorMessage = $("#wagsErrorMessage");
@@ -93,9 +93,24 @@ exports.getCurrentText_ = () => {
 	return "";
 };
 
+exports.audioOnHack = function () {
+	var myAudio = new Audio("https://media.graphcms.com/b0IXeyJzSDCZgVRHkFHL");
+	myAudio.loop = true;
+	myAudio.play();
+	return myAudio;
+};
+
+exports.audioOffHack = function (myAudio) {
+	return function () {
+		myAudio.pause();
+	};
+};
+
 exports.getAwfulHack_ = () => awfulHack.push;
 exports.getPlayKey_ = () => playKey.push;
-exports.setPlayKey_ = (push) => () => { playKey.push = push; }
+exports.setPlayKey_ = (push) => () => {
+	playKey.push = push;
+};
 exports.isCtrlG = (args) => () => {
-  return args.evt.ctrlKey && args.evt.key === "g";
-}
+	return args.evt.ctrlKey && args.evt.key === "g";
+};

@@ -3,6 +3,7 @@ module Lib
   , postToolbarInit
   , aceKeyEvent
   , initF
+  , HTMLAudio
   , InitSig
   , PlayingState(..)
   ) where
@@ -10,7 +11,6 @@ module Lib
 import Prelude
 
 import Control.Alt ((<|>))
-import Unmute (unmute)
 import Control.Comonad.Cofree (Cofree, mkCofree)
 import Control.Monad.Except (runExceptT, throwError)
 import Control.Promise (toAffE)
@@ -18,7 +18,7 @@ import Data.Array (findMap, intercalate, (!!))
 import Data.Array as Array
 import Data.Compactable (compact)
 import Data.Either (Either(..), either, hush)
-import Data.Foldable (fold)
+import Data.Foldable (fold, for_)
 import Data.Function.Uncurried (Fn2, Fn3, mkFn2, mkFn3)
 import Data.Functor (mapFlipped)
 import Data.Maybe (Maybe(..), fromMaybe, maybe)
@@ -65,6 +65,11 @@ import WAGS.Lib.Tidal.Types as TT
 import WAGS.Lib.Tidal.Util (doDownloads)
 import WAGS.Run (Run, run)
 import WAGS.WebAPI (AudioContext)
+
+data HTMLAudio
+
+foreign import audioOnHack :: Effect HTMLAudio
+foreign import audioOffHack :: HTMLAudio -> Effect Unit
 
 easingAlgorithm :: Cofree ((->) Int) Int
 easingAlgorithm =
@@ -271,24 +276,25 @@ getDuration = findMap durationParser
         *> floatValue
     )
 
-
 parseUsingDefault :: forall event. T.Cycle (VM.Maybe (TT.Note event)) -> String -> T.Cycle (VM.Maybe (TT.Note event))
 parseUsingDefault d = fromMaybe d
   <<< hush
   <<< parseWithBrackets
 
-
 initF
-  :: Ref.Ref (T.Cycle (VM.Maybe (TT.Note Unit)))
+  :: Ref.Ref (Maybe HTMLAudio)
+  -> Ref.Ref (T.Cycle (VM.Maybe (TT.Note Unit)))
   -> Ref.Ref PlayingState
   -> Ref.Ref SampleCache
   -> Ref.Ref Modules
   -> Aff Unit
   -> Effect String
   -> InitSig
-initF cycleRef playingState bufferCache modulesR checkForAuthorization gcText setAlert removeAlert onLoad onStop onPlay setAwfulHack = Ref.read playingState >>=
+initF htmlAudio cycleRef playingState bufferCache modulesR checkForAuthorization gcText setAlert removeAlert onLoad onStop onPlay setAwfulHack = Ref.read playingState >>=
   case _ of
     Stopped -> do
+      Ref.read htmlAudio >>= flip for_ audioOffHack
+      audioOnHack >>= flip Ref.write htmlAudio <<< Just
       onLoad
       Ref.write (Loading { unsubscribe: pure unit }) playingState
       { event, push } <- create
@@ -383,33 +389,32 @@ initF cycleRef playingState bufferCache modulesR checkForAuthorization gcText se
 
       launchAff_ do
         resultOfThing <- try do
-            checkForAuthorization
-            audioCtx <- liftEffect $ context
-            liftEffect $ unmute audioCtx false false
-            waStatus <- liftEffect $ contextState audioCtx
-            -- void the constant 0 hack
-            -- this will result in a very slight performance decrease but makes iOS and Mac more sure
-            ffiAudio <- liftEffect $ makeFFIAudioSnapshot audioCtx
-            when (waStatus /= "running") (toAffE $ contextResume audioCtx)
-            _ <- liftEffect $ constant0Hack audioCtx
-            let
-              FullSceneBuilder { triggerWorld, piece } =
-                engine
-                  (pure unit)
-                  (map (const <<< const) (wagEvent audioCtx))
-                  (Left (r2b bufferCache))
-            trigger /\ world <- snd $ triggerWorld (audioCtx /\ (pure (pure {} /\ pure {})))
-            liftEffect do
-              unsubscribe <- subscribe
-                (run trigger world { easingAlgorithm } ffiAudio piece)
-                ( \(_ :: Run TidalRes Analysers) -> do
-                    pure unit
-                )
-              Ref.modify_ (minLoading unsubscribe) playingState
-              -- start the machine
-              push unit
-              -- set the pusher
-              setAwfulHack push
+          checkForAuthorization
+          audioCtx <- liftEffect $ context
+          waStatus <- liftEffect $ contextState audioCtx
+          -- void the constant 0 hack
+          -- this will result in a very slight performance decrease but makes iOS and Mac more sure
+          ffiAudio <- liftEffect $ makeFFIAudioSnapshot audioCtx
+          when (waStatus /= "running") (toAffE $ contextResume audioCtx)
+          _ <- liftEffect $ constant0Hack audioCtx
+          let
+            FullSceneBuilder { triggerWorld, piece } =
+              engine
+                (pure unit)
+                (map (const <<< const) (wagEvent audioCtx))
+                (Left (r2b bufferCache))
+          trigger /\ world <- snd $ triggerWorld (audioCtx /\ (pure (pure {} /\ pure {})))
+          liftEffect do
+            unsubscribe <- subscribe
+              (run trigger world { easingAlgorithm } ffiAudio piece)
+              ( \(_ :: Run TidalRes Analysers) -> do
+                  pure unit
+              )
+            Ref.modify_ (minLoading unsubscribe) playingState
+            -- start the machine
+            push unit
+            -- set the pusher
+            setAwfulHack push
         case resultOfThing of
           Left err -> do
             Log.error "PLAY AFF FAILED"
@@ -419,6 +424,7 @@ initF cycleRef playingState bufferCache modulesR checkForAuthorization gcText se
     Loading _ -> mempty
     Playing { audioCtx, unsubscribe } -> do
       close audioCtx
+      Ref.read htmlAudio >>= flip for_ audioOffHack
       unsubscribe
       setAwfulHack mempty
       Ref.write Stopped playingState
@@ -430,8 +436,9 @@ postToolbarInitInternal ctrlPEvt args = do
   bufferCache <- Ref.new Object.empty
   playingState <- Ref.new Stopped
   cycleRef <- Ref.new bd
+  htmlAudio <- Ref.new Nothing
   cb <- postToolbarInit_ args
-    (initF cycleRef playingState bufferCache modulesR (pure unit) getCurrentText_)
+    (initF htmlAudio cycleRef playingState bufferCache modulesR (pure unit) getCurrentText_)
   -- never unsubscribe from key event for now
   -- change later?
   _ <- subscribe ctrlPEvt \_ -> do

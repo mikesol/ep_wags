@@ -3,6 +3,7 @@ module Lib
   , postToolbarInit
   , aceKeyEvent
   , initF
+  , setUpIosAudio
   , InitSig
   , PlayingState(..)
   ) where
@@ -288,6 +289,7 @@ initF
 initF cycleRef playingState bufferCache modulesR checkForAuthorization gcText setAlert removeAlert onLoad onStop onPlay setAwfulHack = Ref.read playingState >>=
   case _ of
     Stopped -> do
+      startIosAudio
       onLoad
       Ref.write (Loading { unsubscribe: pure unit }) playingState
       { event, push } <- create
@@ -416,17 +418,20 @@ initF cycleRef playingState bufferCache modulesR checkForAuthorization gcText se
           Right _ -> pure unit
     Loading _ -> mempty
     Playing { audioCtx, unsubscribe } -> do
+      stopIosAudio
       close audioCtx
       unsubscribe
       setAwfulHack mempty
       Ref.write Stopped playingState
       onStop
 
-foreign import unmuteIosAudio :: Effect Unit
+foreign import setUpIosAudio :: Effect Unit
+foreign import startIosAudio :: Effect Unit
+foreign import stopIosAudio :: Effect Unit
 
 postToolbarInitInternal :: Event Unit -> Foreign -> Effect Unit
 postToolbarInitInternal ctrlPEvt args = do
-  liftEffect $ unmuteIosAudio
+  liftEffect $ setUpIosAudio
   modulesR <- freshModules >>= Ref.new
   bufferCache <- Ref.new Object.empty
   playingState <- Ref.new Stopped

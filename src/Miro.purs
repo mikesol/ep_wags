@@ -13,7 +13,7 @@ import Effect.Aff (Error, launchAff_, makeAff)
 import Effect.Class (liftEffect)
 import Effect.Ref as Ref
 import JIT.EvalSources (freshModules)
-import Lib (PlayingState(..), InitSig, initF)
+import Lib (PlayingState(..), InitSig, setUpIosAudio, initF)
 import WAGS.Lib.Tidal.Cycle (bd)
 
 foreign import miroOnReady :: Effect Unit -> InitSig -> (Error -> Effect Unit) -> (Unit -> Effect Unit) -> Effect Unit
@@ -56,5 +56,6 @@ main = do
       (Ref.read txtRf)
   launchAff_ do
     makeAff \cb -> do
+      setUpIosAudio
       miroOnReady (selectionHandler txtRf) onClick (cb <<< Left) (cb <<< Right)
       mempty

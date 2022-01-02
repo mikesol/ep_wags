@@ -22,6 +22,7 @@ import Data.Foldable (fold)
 import Data.Function.Uncurried (Fn2, Fn3, mkFn2, mkFn3)
 import Data.Functor (mapFlipped)
 import Data.Maybe (Maybe(..), fromMaybe, maybe)
+import Data.Newtype (wrap)
 import Data.Nullable (toMaybe)
 import Data.Number as DN
 import Data.String as String
@@ -33,7 +34,6 @@ import Data.Variant.Maybe as VM
 import Effect (Effect)
 import Effect.Aff (Aff, Fiber, Milliseconds(..), delay, killFiber, launchAff, launchAff_, makeAff, try)
 import Effect.Class (liftEffect)
-import Effect.Class.Console as Log
 import Effect.Exception (error)
 import Effect.Ref as Ref
 import Effect.Unsafe (unsafePerformEffect)
@@ -53,12 +53,12 @@ import Text.Parsing.StringParser.CodeUnits (anyDigit, anyLetter, char, oneOf, wh
 import Text.Parsing.StringParser.CodeUnits as ParserCU
 import Text.Parsing.StringParser.Combinators (many1, option)
 import Unsafe.Coerce (unsafeCoerce)
-import WAGS.Interpret (close, constant0Hack, context, contextResume, contextState, makeFFIAudioSnapshot)
+import WAGS.Interpret (FFIAudioSnapshot, close, constant0Hack, context, contextResume, contextState, makeFFIAudioSnapshot)
 import WAGS.Lib.Learn (Analysers, FullSceneBuilder(..))
 import WAGS.Lib.Tidal (AFuture)
 import WAGS.Lib.Tidal.Cycle (bd)
 import WAGS.Lib.Tidal.Engine (engine)
-import WAGS.Lib.Tidal.Tidal (drone, parseWithBrackets)
+import WAGS.Lib.Tidal.Tidal (drone, openFuture, parseWithBrackets)
 import WAGS.Lib.Tidal.Tidal as T
 import WAGS.Lib.Tidal.Types (BufferUrl(..), TidalRes, SampleCache)
 import WAGS.Lib.Tidal.Types as TT
@@ -105,13 +105,13 @@ type InitSig =
   -> Effect Unit
   -> Effect Unit
   -> Effect Unit
-  -> ((Unit -> Effect Unit) -> Effect Unit)
+  -> ((Boolean -> Effect Unit) -> Effect Unit)
   -> Effect Unit
 
 foreign import getCurrentText_ :: Effect String
 foreign import postToolbarInit_ :: Foreign -> InitSig -> Effect (Effect Unit)
 
-foreign import getAwfulHack_ :: Effect (Unit -> Effect Unit)
+foreign import getAwfulHack_ :: Effect (Boolean -> Effect Unit)
 foreign import getPlayKey_ :: Effect (Unit -> Effect Unit)
 foreign import setPlayKey_ :: (Unit -> Effect Unit) -> Effect Unit
 data PlayingState
@@ -124,7 +124,7 @@ data PlayingState
 
 minLoading :: Effect Unit -> PlayingState -> PlayingState
 minLoading unsubscribe Stopped = Loading { unsubscribe }
-minLoading unsubscribe (Loading _) = Loading { unsubscribe }
+minLoading aa (Loading { unsubscribe }) = Loading { unsubscribe: aa *> unsubscribe }
 minLoading unsubscribe (Playing { audioCtx }) = Playing { unsubscribe, audioCtx }
 
 minPlay :: AudioContext -> PlayingState -> PlayingState
@@ -271,12 +271,10 @@ getDuration = findMap durationParser
         *> floatValue
     )
 
-
 parseUsingDefault :: forall event. T.Cycle (VM.Maybe (TT.Note event)) -> String -> T.Cycle (VM.Maybe (TT.Note event))
 parseUsingDefault d = fromMaybe d
   <<< hush
   <<< parseWithBrackets
-
 
 initF
   :: Ref.Ref (T.Cycle (VM.Maybe (TT.Note Unit)))
@@ -294,21 +292,35 @@ initF cycleRef playingState bufferCache modulesR checkForAuthorization gcText se
       Ref.write (Loading { unsubscribe: pure unit }) playingState
       { event, push } <- create
       nextUpR <- Ref.new (pure unit :: Fiber Unit)
+      wagRef <- Ref.new (openFuture (wrap 1.0))
       let
-        pushWagAndCarryOn :: AudioContext -> AFuture -> (AFuture -> Effect Unit) -> Aff Unit
-        pushWagAndCarryOn audioCtx wag nextWag = do
+        pushWagAndCarryOn :: Boolean -> FFIAudioSnapshot -> AudioContext -> AFuture -> (AFuture -> Effect Unit) -> Aff Unit
+        pushWagAndCarryOn shouldStart ffiAudio audioCtx wag nextWag = do
           -- Log.info "pushing next wag"
           doDownloads audioCtx bufferCache mempty identity wag
-          liftEffect do
-            nextWag wag
-            st <- Ref.read playingState
-            case st of
-              Loading _ -> onPlay
-              _ -> pure unit
-            Ref.modify_ (minPlay audioCtx) playingState
+          liftEffect $ nextWag wag
+          when shouldStart do
+            let
+              FullSceneBuilder { triggerWorld, piece } =
+                engine
+                  (pure unit)
+                  (map (const <<< const) (r2b wagRef))
+                  (Left (r2b bufferCache))
+            trigger /\ world <- snd $ triggerWorld (audioCtx /\ (pure (pure {} /\ pure {})))
+            liftEffect do
+              unsubscribe <- subscribe
+                (run trigger world { easingAlgorithm } ffiAudio piece)
+                ( \(_ :: Run TidalRes Analysers) -> do
+                    st <- Ref.read playingState
+                    Ref.modify_ (minPlay audioCtx) playingState
+                    case st of
+                      Loading _ -> onPlay
+                      _ -> pure unit
+                )
+              Ref.modify_ (minLoading unsubscribe) playingState
 
-        crunch :: AudioContext -> String -> (AFuture -> Effect Unit) -> Aff Unit
-        crunch audioCtx txt nextWag = do
+        crunch :: Boolean -> FFIAudioSnapshot -> AudioContext -> String -> (AFuture -> Effect Unit) -> Aff Unit
+        crunch shouldStart ffiAudio audioCtx txt nextWag = do
           -- todo: can compile be fiberized to be faster?
           -- Log.info "step 1"
           res <- try $ makeAff \cb -> do
@@ -347,75 +359,58 @@ initF cycleRef playingState bufferCache modulesR checkForAuthorization gcText se
                 >>= either (throwError <<< error <<< show) pure
               Ref.write o.modules modulesR
               let wag = (unsafeCoerce :: Foreign -> AFuture) wag'
-              launchAff_ $ pushWagAndCarryOn audioCtx wag nextWag
+              launchAff_ $ pushWagAndCarryOn shouldStart ffiAudio audioCtx wag nextWag
       -- Log.info "step 4"
       --------------
       --------------
 
-      let
-        wagEvent audioCtx = makeEvent \nextWag -> do
-          subscribe event \_ -> do
-            current <- Ref.read nextUpR
-            fib <- launchAff do
-              killFiber (error "Could not kill fiber") current
-              delay (Milliseconds 400.0)
-              -- need to remove alert as well
-              txt <- liftEffect $ removeAlert *> gcText
-              let itype = strToInputType txt
-              case itype of
-                DPureScript -> crunch audioCtx txt nextWag
-                DText -> do
-                  prevCyc <- liftEffect $ Ref.read cycleRef
-                  let
-                    modText = stripComments $ sanitizeUsingRegex_ txt
-                    duration = fromMaybe 1.0 (getDuration modText.comments)
-                    samples = getSamples modText.comments
-                    drone' = maybe VM.nothing VM.just
-                      $ getDrone modText.comments
-                    newCyc = parseUsingDefault prevCyc (String.trim modText.withoutComments)
-                    fut = T.make duration
-                      { earth: T.s newCyc
-                      , sounds: samples
-                      , heart: join $ map drone drone'
-                      }
-                  liftEffect $ Ref.write newCyc cycleRef
-                  pushWagAndCarryOn audioCtx fut nextWag
-            Ref.write fib nextUpR
-
       launchAff_ do
-        resultOfThing <- try do
-            checkForAuthorization
-            audioCtx <- liftEffect $ context
-            waStatus <- liftEffect $ contextState audioCtx
-            -- void the constant 0 hack
-            -- this will result in a very slight performance decrease but makes iOS and Mac more sure
-            ffiAudio <- liftEffect $ makeFFIAudioSnapshot audioCtx
-            when (waStatus /= "running") (toAffE $ contextResume audioCtx)
-            _ <- liftEffect $ constant0Hack audioCtx
-            let
-              FullSceneBuilder { triggerWorld, piece } =
-                engine
-                  (pure unit)
-                  (map (const <<< const) (wagEvent audioCtx))
-                  (Left (r2b bufferCache))
-            trigger /\ world <- snd $ triggerWorld (audioCtx /\ (pure (pure {} /\ pure {})))
-            liftEffect do
-              unsubscribe <- subscribe
-                (run trigger world { easingAlgorithm } ffiAudio piece)
-                ( \(_ :: Run TidalRes Analysers) -> do
-                    pure unit
-                )
-              Ref.modify_ (minLoading unsubscribe) playingState
-              -- start the machine
-              push unit
-              -- set the pusher
-              setAwfulHack push
-        case resultOfThing of
-          Left err -> do
-            Log.error "PLAY AFF FAILED"
-            Log.error (show err)
-            throwError err
-          Right _ -> pure unit
+        checkForAuthorization
+        audioCtx <- liftEffect $ context
+        waStatus <- liftEffect $ contextState audioCtx
+        -- void the constant 0 hack
+        -- this will result in a very slight performance decrease but makes iOS and Mac more sure
+        ffiAudio <- liftEffect $ makeFFIAudioSnapshot audioCtx
+        when (waStatus /= "running") (toAffE $ contextResume audioCtx)
+        _ <- liftEffect $ constant0Hack audioCtx
+        usb <- liftEffect $ subscribe event \shouldStart -> do
+          current <- Ref.read nextUpR
+          fib <- launchAff do
+            killFiber (error "Could not kill fiber") current
+            when (not shouldStart) $ delay (Milliseconds 400.0)
+            -- need to remove alert as well
+            txt <- liftEffect $ removeAlert *> gcText
+            let itype = strToInputType txt
+            let nextWag = flip Ref.write wagRef
+            case itype of
+              DPureScript -> crunch shouldStart ffiAudio audioCtx txt nextWag
+              DText -> do
+                prevCyc <- liftEffect $ Ref.read cycleRef
+                let
+                  modText = stripComments $ sanitizeUsingRegex_ txt
+                  duration = fromMaybe 1.0 (getDuration modText.comments)
+                  samples = getSamples modText.comments
+                  drone' = maybe VM.nothing VM.just
+                    $ getDrone modText.comments
+                  newCyc = parseUsingDefault prevCyc (String.trim modText.withoutComments)
+                  fut = T.make duration
+                    { earth: T.s newCyc
+                    , sounds: samples
+                    , heart: join $ map drone drone'
+                    , title: "Local play"
+                    }
+                liftEffect $ Ref.write newCyc cycleRef
+                pushWagAndCarryOn shouldStart ffiAudio audioCtx fut nextWag
+
+          Ref.write fib nextUpR
+
+        -- start the machine
+        -- set the pusher
+        liftEffect do
+          Ref.modify_ (minLoading usb) playingState
+          setAwfulHack push
+          push true
+
     Loading _ -> mempty
     Playing { audioCtx, unsubscribe } -> do
       stopIosAudio
@@ -470,5 +465,5 @@ acePostWriteDomLineHTML :: Fn3 Foreign Foreign (Effect Unit) Unit
 acePostWriteDomLineHTML = mkFn3
   \_ _ cb -> unsafePerformEffect do
     hack <- getAwfulHack_
-    hack unit
+    hack false
     cb

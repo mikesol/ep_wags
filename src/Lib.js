@@ -13,12 +13,12 @@ const playKey = {
 };
 
 exports.wireUpCtrlP_ = (push) => () => {
-  document.addEventListener("keydown", function (event) {
+	document.addEventListener("keydown", function (event) {
 		if (event.ctrlKey && event.key === "g") {
 			push()();
 		}
 	});
-}
+};
 
 exports.setErrorText_ = (text) => () => {
 	const $wagsErrorMessage = $("#wagsErrorMessage");
@@ -34,6 +34,31 @@ exports.sanitizeUsingRegex_ = (str) => {
 exports.postToolbarInit_ = (args) => (cb) => () => {
 	const editbar = args.toolbar;
 	const $editBar = $("#editbar");
+	var client = filestack.init("ArcQnSXbqT4O0OORDyYxrz");
+	editbar.registerCommand("epWagsUpload", () => {
+		client
+			.picker({
+				onFileUploadFinished: (inFile) => {
+					const chat = require("ep_etherpad-lite/static/js/chat").chat;
+					chat.addMessage(
+						{
+							text:
+								'I uploaded "' +
+								inFile.filename +
+								'" to this url: ' +
+								inFile.url,
+							authorId:
+								require("ep_etherpad-lite/static/js/pad").pad.getUserId(),
+							time: new Date().getTime(),
+							displayName: "Uploader"
+						},
+						true,
+						false
+					);
+				},
+			})
+			.open();
+	});
 	editbar.registerDropdownCommand("epWagsError", "wagsError");
 	var f = cb(() =>
 		$editBar
@@ -95,10 +120,12 @@ exports.getCurrentText_ = () => {
 
 exports.getAwfulHack_ = () => awfulHack.push;
 exports.getPlayKey_ = () => playKey.push;
-exports.setPlayKey_ = (push) => () => { playKey.push = push; }
+exports.setPlayKey_ = (push) => () => {
+	playKey.push = push;
+};
 exports.isCtrlG = (args) => () => {
-  return args.evt.ctrlKey && args.evt.key === "g";
-}
+	return args.evt.ctrlKey && args.evt.key === "g";
+};
 
 //////////
 
@@ -114,17 +141,18 @@ const USER_ACTIVATION_EVENTS = [
 	"touchend",
 ];
 
-exports.setUpIosAudio = function() {
-	$("#editbar").find(".ep-wags-play")
-			.after(
-				'<audio id="wagsSilenceHack" loop        src="https://media.graphcms.com/b0IXeyJzSDCZgVRHkFHL"> Your browser does not support the <code>audio</code> element.</audio>'
-			);
-}
+exports.setUpIosAudio = function () {
+	$("#editbar")
+		.find(".ep-wags-play")
+		.after(
+			'<audio id="wagsSilenceHack" loop        src="https://media.graphcms.com/b0IXeyJzSDCZgVRHkFHL"> Your browser does not support the <code>audio</code> element.</audio>'
+		);
+};
 
 exports.startIosAudio = function () {
-  document.getElementById("wagsSilenceHack").play();
-}
+	document.getElementById("wagsSilenceHack").play();
+};
 
-exports.stopIosAudio = function() {
-  document.getElementById("wagsSilenceHack").pause();
-}
+exports.stopIosAudio = function () {
+	document.getElementById("wagsSilenceHack").pause();
+};

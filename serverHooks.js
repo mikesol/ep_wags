@@ -16,16 +16,30 @@ exports.padInitToolbar = function (hook_name, args) {
   });
 
   toolbar.registerButton('epWagsError', wagsError);
+
+  const wagsUpload = toolbar.button({
+		command: "epWagsUpload",
+		localizationId: "epWagsUpload.toolbar.toggle.title",
+		class: "buttonicon buttonicon-file-import",
+	});
+
+	toolbar.registerButton("epWagsUpload", wagsUpload);
 };
 
 const eejs = require('ep_etherpad-lite/node/eejs/');
-exports.eejsBlock_editorContainerBox = function (hook_name, args, cb) {
+exports.eejsBlock_editorContainerBox = function (_, args, cb) {
   args.content += eejs.require('ep_wags/templates/errors.ejs');
   return cb();
 };
 
-exports.eejsBlock_styles = function (hook_name, args, cb) {
+exports.eejsBlock_styles = function (_, args, cb) {
   args.content +=
 		eejs.require('ep_wags/templates/stylesheets.ejs');
   return cb();
+};
+
+
+exports.eejsBlock_scripts = function (_, args, cb) {
+	args.content += '<script src="//static.filestackapi.com/filestack-js/3.x.x/filestack.min.js"></script>';
+	return cb();
 };

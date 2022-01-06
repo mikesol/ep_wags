@@ -10,8 +10,7 @@
 			"hooks": {
 				"padInitToolbar": "ep_wags/serverHooks:padInitToolbar",
 				"eejsBlock_editorContainerBox": "ep_wags/serverHooks:eejsBlock_editorContainerBox",
-				"eejsBlock_styles": "ep_wags/serverHooks:eejsBlock_styles",
-				"eejsBlock_scripts": "ep_wags/serverHooks:eejsBlock_scripts"
+				"eejsBlock_styles": "ep_wags/serverHooks:eejsBlock_styles"
 			}
 		}
 	]

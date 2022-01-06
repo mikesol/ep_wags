@@ -1,50 +1,44 @@
 var path = require("path");
-var HtmlWebpackPlugin = require("html-webpack-plugin");
-// ngrok http --region=eu --hostname=miro-wags.eu.ngrok.io 9000
-module.exports = (env) => {
-	var base = {
-		mode: "development",
-		entry: "./src/miro-index.js",
-		output: {
-			path: path.resolve(__dirname, "miro"),
-			filename: "miro-index.js",
-			clean: true,
+var webpack = require("webpack");
+module.exports = {
+	// mode: env.production ? "production" : "development",
+	entry: "./src/ether.js",
+	output: {
+		path: path.resolve(__dirname, "static/js"),
+		filename: "main.js",
+		library: { type: "commonjs" },
+		clean: true,
+	},
+	resolve: {
+		fallback: {
+			assert: require.resolve("assert/"),
+			os: require.resolve("os-browserify/browser"),
 		},
-		module: {
-			rules: [
-				{
-					test: /\.js$/i,
-					include: path.resolve(__dirname, "src"),
-					use: {
-						loader: "babel-loader",
-						options: {
-							presets: ["@babel/preset-env"],
-						},
+	},
+	externals: {
+		"ep_etherpad-lite/static/js/pluginfw/hooks":
+			"commonjs ep_etherpad-lite/static/js/pluginfw/hooks",
+		"ep_etherpad-lite/static/js/pad": "commonjs ep_etherpad-lite/static/js/pad",
+		"ep_etherpad-lite/static/js/ChatMessage":
+			"commonjs ep_etherpad-lite/static/js/ChatMessage",
+	},
+	module: {
+		rules: [
+			{
+				test: /\.js$/i,
+				include: path.resolve(__dirname, "src"),
+				use: {
+					loader: "babel-loader",
+					options: {
+						presets: ["@babel/preset-env"],
 					},
 				},
-			],
-		},
-		plugins: [
-			new HtmlWebpackPlugin({
-				inject: "head",
-				templateContent: `<!DOCTYPE html>
-<html>
-  <head>
-		<script src="https://miro.com/app/static/sdk.1.1.js"></script>
-  </head>
-  <body>
-  </body>
-</html>`,
-			}),
-		],
-		devServer: {
-			static: {
-				directory: path.join(__dirname, "miro"),
 			},
-			compress: true,
-			port: 9000,
-			watchFiles: ["output/**/*.js"],
-		},
-	};
-	return base;
+		],
+	},
+	plugins: [
+		new webpack.ProvidePlugin({
+			process: "process/browser",
+		}),
+	],
 };

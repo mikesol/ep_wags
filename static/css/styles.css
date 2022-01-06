@@ -2,6 +2,13 @@
   content: "!";
   color: #f00;
   font-weight: bold;
+
+}
+.hide-button {
+  display: none;
+}
+.show-button {
+  display: inline-block;
 }
 .hide-wags-error:before {
   display: none;

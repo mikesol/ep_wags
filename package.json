@@ -12,6 +12,8 @@
 	},
 	"devDependencies": {
 		"@babel/preset-env": "^7.16.4",
+		"assert": "^2.0.0",
+		"audio-buffer-utils": "^5.1.2",
 		"babel-loader": "^8.2.3",
 		"eslint": "^7.28.0",
 		"eslint-config-etherpad": "^2.0.0",
@@ -22,10 +24,16 @@
 		"eslint-plugin-prefer-arrow": "^1.2.3",
 		"eslint-plugin-promise": "^5.1.0",
 		"eslint-plugin-you-dont-need-lodash-underscore": "^6.12.0",
+		"extendable-media-recorder": "^6.5.15",
+		"extendable-media-recorder-wav-encoder": "^7.0.65",
+		"filestack-js": "^3.25.0",
 		"html-webpack-plugin": "^5.5.0",
+		"lamejs": "1.2.0",
+		"os-browserify": "^0.3.0",
 		"purescript": "^0.14.5",
 		"purs-tidy": "^0.6.3",
 		"spago": "^0.20.3",
+		"wavesurfer.js": "^5.2.0",
 		"webpack": "^5.65.0",
 		"webpack-cli": "^4.9.1",
 		"webpack-dev-server": "^4.6.0",
@@ -36,7 +44,7 @@
 		"extends": "etherpad/plugin"
 	},
 	"scripts": {
-		"bundle": "spago install && spago build && spago bundle-module --main Ether --to static/js/main.js",
+		"bundle": "spago install && spago build && webpack --mode=production",
 		"bundle:miro": "spago install && spago build && webpack --mode=production",
 		"start": "spago install && spago build && webpack serve --env=development",
 		"lint": "eslint .",
@@ -47,6 +55,6 @@
 		"url": "https://etherpad.org/"
 	},
 	"peerDependencies": {
-		"ep_etherpad-lite": ">=1.8.6"
+		"ep_etherpad-lite": ">=1.8.14"
 	}
 }

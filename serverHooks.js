@@ -11,7 +11,7 @@ exports.padInitToolbar = function (hook_name, args) {
 
   const wagsError = toolbar.button({
     command: 'epWagsError',
-    localizationId: 'epWagsPlay.toolbar.toggle.title',
+    localizationId: 'epWagsError.toolbar.toggle.title',
     class: 'buttonicon ep-wags-error hide-wags-error',
   });
 
@@ -24,11 +24,20 @@ exports.padInitToolbar = function (hook_name, args) {
 	});
 
 	toolbar.registerButton("epWagsUpload", wagsUpload);
+
+  const wagsRecord = toolbar.button({
+		command: "epWagsRecord",
+		localizationId: "epWagsRecord.toolbar.toggle.title",
+		class: "buttonicon buttonicon-microphone-alt",
+	});
+
+	toolbar.registerButton("epWagsRecord", wagsRecord);
 };
 
 const eejs = require('ep_etherpad-lite/node/eejs/');
 exports.eejsBlock_editorContainerBox = function (_, args, cb) {
   args.content += eejs.require('ep_wags/templates/errors.ejs');
+  args.content += eejs.require("ep_wags/templates/record.ejs");
   return cb();
 };
 
@@ -36,10 +45,4 @@ exports.eejsBlock_styles = function (_, args, cb) {
   args.content +=
 		eejs.require('ep_wags/templates/stylesheets.ejs');
   return cb();
-};
-
-
-exports.eejsBlock_scripts = function (_, args, cb) {
-	args.content += '<script src="//static.filestackapi.com/filestack-js/3.x.x/filestack.min.js"></script>';
-	return cb();
 };

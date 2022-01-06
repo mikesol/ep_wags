@@ -39,22 +39,17 @@ exports.postToolbarInit_ = (args) => (cb) => () => {
 		client
 			.picker({
 				onFileUploadFinished: (inFile) => {
-					const chat = require("ep_etherpad-lite/static/js/chat").chat;
-					chat.addMessage(
-						{
-							text:
-								'I uploaded "' +
-								inFile.filename +
-								'" to this url: ' +
-								inFile.url,
-							authorId:
-								require("ep_etherpad-lite/static/js/pad").pad.getUserId(),
-							time: new Date().getTime(),
-							displayName: "Uploader"
-						},
-						true,
-						false
-					);
+					const hooks = require("ep_etherpad-lite/static/js/pluginfw/hooks");
+					const pad = require("ep_etherpad-lite/static/js/pad").pad;
+					const ChatMessage = require("ep_etherpad-lite/static/js/ChatMessage");
+					const text =
+						'I uploaded "' + inFile.filename + '" to this url: ' + inFile.url;
+					const message = new ChatMessage(text);
+					hooks
+						.aCallAll("chatSendMessage", Object.freeze({ message }))
+						.then(() => {
+							pad.collabClient.sendMessage({ type: "CHAT_MESSAGE", message });
+						});
 				},
 			})
 			.open();

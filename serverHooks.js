@@ -28,7 +28,7 @@ exports.padInitToolbar = function (hook_name, args) {
   const wagsRecord = toolbar.button({
 		command: "epWagsRecord",
 		localizationId: "epWagsRecord.toolbar.toggle.title",
-		class: "buttonicon buttonicon-microphone-alt",
+		class: "buttonicon buttonicon-microphone-alt ep-wags-record",
 	});
 
 	toolbar.registerButton("epWagsRecord", wagsRecord);

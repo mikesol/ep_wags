@@ -181,7 +181,7 @@ exports.postToolbarInit_ = (args) => (cb) => () => {
 			.open();
 	});
 	editbar.registerDropdownCommand("epWagsError", "wagsError");
-	editbar.registerDropdownCommand("epWagsRecord", "wagsRecord");
+	//editbar.registerDropdownCommand("epWagsRecord", "wagsRecord");
 	const makeRecorder = () => {
 		$("#wavesurferJsRecorder").empty();
 		return WaveSurfer.create({
@@ -204,7 +204,6 @@ exports.postToolbarInit_ = (args) => (cb) => () => {
 		const recorderWavesurfer = makeRecorder();
 		const chunks = [];
 		const startMicrophone = () => {
-			console.log("starting microphone");
 			chunks.length = 0;
 			recorderWavesurfer.microphone.on("deviceReady", function (stream) {
 				const mediaRecorder = new emr.MediaRecorder(stream, {
@@ -212,12 +211,9 @@ exports.postToolbarInit_ = (args) => (cb) => () => {
 				});
 				//const mediaRecorder = new MediaRecorder(stream);
 				mediaRecorder.ondataavailable = (event) => {
-					console.log("data available");
 					chunks.push(event.data);
 				};
 				mediaRecorder.start();
-				$("#recordingstart").removeClass("show-button").addClass("hide-button");
-				$("#recordingstop").removeClass("hide-button").addClass("show-button");
 
 				const stopMicrophone = () => {
 					mediaRecorder.onstop = () => {
@@ -335,8 +331,8 @@ exports.postToolbarInit_ = (args) => (cb) => () => {
 							$("#recordingplay").off("click").on("click", playLoop);
 							///-------
 							const resetInterface = () => {
-								editbar.toggleDropDown("epWagsRecord", () => {
-									$("#recordingstart")
+								editbar.toggleDropDown("wagsRecord", () => {
+									$("#recordingstop")
 										.removeClass("hide-button")
 										.addClass("show-button");
 									$("#recordingtagdiv")
@@ -351,7 +347,6 @@ exports.postToolbarInit_ = (args) => (cb) => () => {
 									$("#recordingcancel")
 										.removeClass("show-button")
 										.addClass("hide-button");
-									recorderFlow();
 								});
 							};
 							const cancelRecording = () => {
@@ -372,11 +367,9 @@ exports.postToolbarInit_ = (args) => (cb) => () => {
 			});
 			recorderWavesurfer.microphone.start();
 		};
-
-		$("#recordingstart").off("click").on("click", startMicrophone);
+		editbar.toggleDropDown("wagsRecord", startMicrophone);
 	};
 
-	recorderFlow();
 	const f = cb(() =>
 		$editBar
 			.find(".ep-wags-error")
@@ -410,6 +403,9 @@ exports.postToolbarInit_ = (args) => (cb) => () => {
 	// does not work in safari
 	//////editbar.registerCommand("epWagsPlay", f);
 	$editBar.find(".ep-wags-play").off("click").on("click", f);
+	editbar.dropdowns.push("wagsRecord");
+	$editBar.find(".ep-wags-record").off("click").on("click", recorderFlow);
+
 	return f;
 };
 

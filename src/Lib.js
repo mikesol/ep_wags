@@ -253,6 +253,11 @@ exports.postToolbarInit_ = (args) => (cb) => () => {
 								end: dur * 0.9,
 								minLength: 0.02,
 							});
+							region.on('update-end', () => {
+								// hack to get the region to lose focus
+								// this avoids the double-click problem
+								$("#wagsRecord").focus();
+							})
 							const playLoop = () => {
 								region.playLoop();
 								$("#recordingplay")

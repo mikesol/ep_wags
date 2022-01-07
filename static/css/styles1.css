@@ -1,0 +1,48 @@
+.ep-wags-error:before {
+  content: "!";
+  color: #f00;
+  font-weight: bold;
+
+}
+.hide-button {
+  display: none;
+}
+.show-button {
+  display: inline-block;
+}
+.hide-input {
+  display: none;
+}
+.show-input {
+  display: inline-block;
+}
+.hide-wags-error:before {
+  display: none;
+}
+.show-wags-error:before {
+  display: flex;
+}
+.cog-spin:before {
+  -webkit-animation: cogSpinAnimation 2s infinite linear;
+  animation: cogSpinAnimation 2s infinite linear;
+}
+@-webkit-keyframes cogSpinAnimation {
+  0% {
+    -webkit-transform: rotate(0deg);
+    transform: rotate(0deg);
+  }
+  100% {
+    -webkit-transform: rotate(359deg);
+    transform: rotate(359deg);
+  }
+}
+@keyframes cogSpinAnimation {
+  0% {
+    -webkit-transform: rotate(0deg);
+    transform: rotate(0deg);
+  }
+  100% {
+    -webkit-transform: rotate(359deg);
+    transform: rotate(359deg);
+  }
+}

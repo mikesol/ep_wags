@@ -1,7 +1,7 @@
 {
 	"name": "ep_wags",
 	"description": "EP Plugin for Wags.",
-	"version": "0.0.32",
+	"version": "0.0.33",
 	"author": "mikesol",
 	"engines": {
 		"node": ">=10.17.1"
@@ -33,6 +33,7 @@
 		"purescript": "^0.14.5",
 		"purs-tidy": "^0.6.3",
 		"spago": "^0.20.3",
+		"unique-names-generator": "^4.6.0",
 		"wavesurfer.js": "^5.2.0",
 		"webpack": "^5.65.0",
 		"webpack-cli": "^4.9.1",

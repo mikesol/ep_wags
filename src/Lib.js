@@ -8,6 +8,7 @@ const emr = require("extendable-media-recorder");
 const wavrec = require("extendable-media-recorder-wav-encoder");
 const util = require("audio-buffer-utils");
 const lamejs = require("lamejs");
+const ung = require("unique-names-generator");
 
 // sort of hackish
 wavrec.connect().then((c) => emr.register(c));
@@ -173,7 +174,7 @@ exports.postToolbarInit_ = (args) => (cb) => () => {
 			.picker({
 				onFileUploadFinished: (inFile) => {
 					const text =
-						'I uploaded "' + inFile.filename + '" to this url: ' + inFile.url;
+						'"' + inFile.filename + '" is now at this url: ' + inFile.url;
 					sendMessage(text);
 				},
 			})
@@ -211,7 +212,7 @@ exports.postToolbarInit_ = (args) => (cb) => () => {
 				});
 				//const mediaRecorder = new MediaRecorder(stream);
 				mediaRecorder.ondataavailable = (event) => {
-					console.log('data available');
+					console.log("data available");
 					chunks.push(event.data);
 				};
 				mediaRecorder.start();
@@ -223,12 +224,21 @@ exports.postToolbarInit_ = (args) => (cb) => () => {
 						const blob = new Blob(chunks, { type: "audio/wav" });
 						//const blob = new Blob(chunks, { type: "audio/ogg; codecs=opus" });
 						const editorWavesurfer = makeEditor();
+
+						const randomName = ung.uniqueNamesGenerator({
+							dictionaries: [ung.adjectives, ung.animals],
+							separator: "-",
+						});
+						$("#recordingtag").val(randomName);
 						$("#recordingstop")
 							.removeClass("show-button")
 							.addClass("hide-button");
 						$("#recordingupload")
 							.removeClass("hide-button")
 							.addClass("show-button");
+						$("#recordingtagdiv")
+							.removeClass("hide-input")
+							.addClass("show-input");
 						$("#recordingplay")
 							.removeClass("hide-button")
 							.addClass("show-button");
@@ -249,11 +259,17 @@ exports.postToolbarInit_ = (args) => (cb) => () => {
 							});
 							const playLoop = () => {
 								region.playLoop();
-								$("#recordingplay").text("Pause").off('click').on('click',pause);
+								$("#recordingplay")
+									.text("Pause")
+									.off("click")
+									.on("click", pause);
 							};
 							const pause = () => {
 								editorWavesurfer.pause();
-								$("#recordingplay").text("Play").off('click').on('click',playLoop);
+								$("#recordingplay")
+									.text("Play")
+									.off("click")
+									.on("click", playLoop);
 							};
 							const uploadRecording = () => {
 								resetInterface();
@@ -264,7 +280,11 @@ exports.postToolbarInit_ = (args) => (cb) => () => {
 									.then((b) => b.arrayBuffer())
 									.then((b) => ctx.decodeAudioData(b))
 									.then((buf) => {
-										const newBuf = util.slice(buf, parseInt(region.start * buf.sampleRate), parseInt(region.end * buf.sampleRate));
+										const newBuf = util.slice(
+											buf,
+											parseInt(region.start * buf.sampleRate),
+											parseInt(region.end * buf.sampleRate)
+										);
 										const output = audioBufferToWav(newBuf);
 										const tokenW = {};
 										const tokenM = {};
@@ -273,17 +293,23 @@ exports.postToolbarInit_ = (args) => (cb) => () => {
 												`Retrying ${obj.location} for ${obj.filename}. Attempt ${obj.attempt} of 10.`
 											);
 										};
-										const timeNow = new Date().getTime();
+										const potentialTagName = $("#recordingtag").val();
+										const tagName =
+											potentialTagName === ""
+												? "" + Math.floor(new Date().getTime())
+												: potentialTagName.trim();
 										client
 											.upload(
 												output.wavBlob,
 												{ onRetry },
-												{ filename: Math.floor(timeNow) + ".wav" },
+												{ filename: tagName + ".wav" },
 												tokenW
 											)
 											.then((res) => {
 												const wavText =
-													"I uploaded a wav version of your recording to this url: " +
+													'A new recording "' +
+													tagName +
+													'.wav" is at this url: ' +
 													res.url;
 												sendMessage(wavText);
 											});
@@ -292,25 +318,30 @@ exports.postToolbarInit_ = (args) => (cb) => () => {
 												.upload(
 													output.mp3Blob,
 													{ onRetry },
-													{ filename: Math.floor(timeNow) + ".mp3" },
+													{ filename: tagName + ".mp3" },
 													tokenM
 												)
 												.then((res) => {
 													const mp3Text =
-														"I uploaded a mp3 version of your recording to this url: " +
+														'A new recording "' +
+														tagName +
+														'.mp3" is at this url: ' +
 														res.url;
 													sendMessage(mp3Text);
 												});
 										}
 									});
 							};
-							$("#recordingplay").off('click').on('click',playLoop);
+							$("#recordingplay").off("click").on("click", playLoop);
 							///-------
 							const resetInterface = () => {
 								editbar.toggleDropDown("epWagsRecord", () => {
 									$("#recordingstart")
 										.removeClass("hide-button")
 										.addClass("show-button");
+									$("#recordingtagdiv")
+										.removeClass("show-input")
+										.addClass("hide-input");
 									$("#recordingupload")
 										.removeClass("show-button")
 										.addClass("hide-button");
@@ -327,22 +358,22 @@ exports.postToolbarInit_ = (args) => (cb) => () => {
 								resetInterface();
 							};
 							///-------
-							$("#recordingupload").off('click').on('click',uploadRecording);
-							$("#recordingcancel").off('click').on('click',cancelRecording);
+							$("#recordingupload").off("click").on("click", uploadRecording);
+							$("#recordingcancel").off("click").on("click", cancelRecording);
 						});
 						editorWavesurfer.loadBlob(blob);
 						//editorWavesurfer.load(audioURL);
-					}
+					};
 					mediaRecorder.stop();
 					recorderWavesurfer.microphone.stop();
 					recorderWavesurfer.stop();
 				};
-				$("#recordingstop").off('click').on('click',stopMicrophone);
+				$("#recordingstop").off("click").on("click", stopMicrophone);
 			});
 			recorderWavesurfer.microphone.start();
 		};
 
-		$("#recordingstart").off('click').on('click',startMicrophone);
+		$("#recordingstart").off("click").on("click", startMicrophone);
 	};
 
 	recorderFlow();
@@ -378,7 +409,7 @@ exports.postToolbarInit_ = (args) => (cb) => () => {
 	});
 	// does not work in safari
 	//////editbar.registerCommand("epWagsPlay", f);
-	$editBar.find(".ep-wags-play").off('click').on('click',f);
+	$editBar.find(".ep-wags-play").off("click").on("click", f);
 	return f;
 };
 

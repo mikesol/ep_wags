@@ -60,7 +60,7 @@ import WAGS.Lib.Tidal.Cycle (bd)
 import WAGS.Lib.Tidal.Engine (engine)
 import WAGS.Lib.Tidal.Tidal (drone, openFuture, parseWithBrackets)
 import WAGS.Lib.Tidal.Tidal as T
-import WAGS.Lib.Tidal.Types (BufferUrl(..), TidalRes, SampleCache)
+import WAGS.Lib.Tidal.Types (BufferUrl(..), emptyCtrl, TidalRes, SampleCache)
 import WAGS.Lib.Tidal.Types as TT
 import WAGS.Lib.Tidal.Util (doDownloads)
 import WAGS.Run (Run, run)
@@ -305,6 +305,7 @@ initF cycleRef playingState bufferCache modulesR checkForAuthorization gcText se
                 engine
                   (pure unit)
                   (map (const <<< const) (r2b wagRef))
+                  (pure emptyCtrl)
                   (Left (r2b bufferCache))
             trigger /\ world <- snd $ triggerWorld (audioCtx /\ (pure (pure {} /\ pure {})))
             liftEffect do

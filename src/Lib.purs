@@ -509,6 +509,7 @@ type FSFail' = { detail :: String }
 type FSResult' =
   { name :: String
   , description :: String
+  , duration :: Number
   , previews ::
       { "preview-lq-ogg" :: String
       , "preview-lq-mp3" :: String
@@ -534,7 +535,7 @@ doBotStuff txt = launchAff_ $ do
     CallFS { p, q } -> do
       res <- AX.request
         ( AX.defaultRequest
-            { url = "https://freesound.org/apiv2/search/text/?page=" <> show p <> "&token=fnqb3U00p5fmEOZSiwGyTLS2ZwYPkygJ7b8KjVEi&query=" <> q <> "&fields=name,description,previews"
+            { url = "https://freesound.org/apiv2/search/text/?page=" <> show p <> "&token=fnqb3U00p5fmEOZSiwGyTLS2ZwYPkygJ7b8KjVEi&query=" <> q <> "&fields=name,description,duration,previews"
             , method = Left GET
             , responseFormat = ResponseFormat.string
             }
@@ -553,7 +554,7 @@ doBotStuff txt = launchAff_ $ do
               $ map formatResultForChat results
 
 formatResultForChat :: FSResult' -> String
-formatResultForChat { name, description, previews: { "preview-hq-ogg": ogg } } = "Name: " <> name <> "\nDescription: " <> String.take 30 description <> "..." <> "\nOgg: " <> ogg
+formatResultForChat { name, description, duration, previews: { "preview-hq-ogg": ogg } } = "Name: " <> name <> "\nDuration: " <> show duration <> "\nDescription: " <> String.take 30 description <> "..." <> "\nOgg: " <> ogg
 
 foreign import sendChatMessage_ :: String -> Effect Unit
 

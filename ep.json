@@ -3,6 +3,8 @@
 		{
 			"name": "ep_wags",
 			"client_hooks": {
+				"chatNewMessage": "ep_wags/static/js/main:chatNewMessage",
+				"chatNewMessage": "ep_wags/static/js/main:chatSendMessage",
 				"postToolbarInit": "ep_wags/static/js/main:postToolbarInit",
 				"aceKeyEvent": "ep_wags/static/js/main:aceKeyEvent",
 				"acePostWriteDomLineHTML": "ep_wags/static/js/main:acePostWriteDomLineHTML"

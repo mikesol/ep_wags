@@ -165,6 +165,7 @@ const sendMessage = (text) => {
 		});
 	});
 };
+exports.sendChatMessage_ = (text) => () => sendMessage(text);
 exports.postToolbarInit_ = (args) => (cb) => () => {
 	const editbar = args.toolbar;
 	const $editBar = $("#editbar");

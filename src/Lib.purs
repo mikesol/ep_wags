@@ -4,12 +4,16 @@ module Lib
   , aceKeyEvent
   , initF
   , setUpIosAudio
+  , chatNewMessage
+  , chatSendMessage
   , InitSig
   , PlayingState(..)
   ) where
 
 import Prelude
 
+import Affjax as AX
+import Affjax.ResponseFormat as ResponseFormat
 import Control.Alt ((<|>))
 import Control.Comonad.Cofree (Cofree, mkCofree)
 import Control.Monad.Except (runExceptT, throwError)
@@ -18,9 +22,11 @@ import Data.Array (findMap, intercalate, (!!))
 import Data.Array as Array
 import Data.Compactable (compact)
 import Data.Either (Either(..), either, hush)
-import Data.Foldable (fold)
+import Data.Foldable (fold, for_)
 import Data.Function.Uncurried (Fn2, Fn3, mkFn2, mkFn3)
 import Data.Functor (mapFlipped)
+import Data.HTTP.Method (Method(..))
+import Data.Int as DI
 import Data.Maybe (Maybe(..), fromMaybe, maybe)
 import Data.Newtype (wrap)
 import Data.Nullable (toMaybe)
@@ -34,6 +40,7 @@ import Data.Variant.Maybe as VM
 import Effect (Effect)
 import Effect.Aff (Aff, Fiber, Milliseconds(..), delay, killFiber, launchAff, launchAff_, makeAff, try)
 import Effect.Class (liftEffect)
+import Effect.Class.Console as Log
 import Effect.Exception (error)
 import Effect.Ref as Ref
 import Effect.Unsafe (unsafePerformEffect)
@@ -47,6 +54,7 @@ import JIT.API as API
 import JIT.Compile (compile)
 import JIT.EvalSources (Modules, evalSources, freshModules)
 import JIT.Loader (Loader, makeLoader)
+import Simple.JSON as JSON
 import Text.Parsing.StringParser (Parser, fail, runParser)
 import Text.Parsing.StringParser as Parser
 import Text.Parsing.StringParser.CodeUnits (anyDigit, anyLetter, char, oneOf, whiteSpace)
@@ -222,6 +230,15 @@ floatValueFracExp =
 floatValue ∷ Parser Number
 floatValue = (Parser.try floatValueFracExp <|> Parser.try floatValueExp <|> floatValueFrac) >>= maybe (fail "String not a float") pure <<< DN.fromString
 
+intValue ∷ Parser Int
+intValue = integerPart >>= maybe (fail "String not an int") pure <<< DI.fromString
+
+fauxUrl :: Parser String
+fauxUrl = fromCharArray <<< Array.fromFoldable <$>
+  ( whiteSpace
+      *> many1 (Parser.try anyDigit <|> Parser.try anyLetter <|> oneOf [ ':', '\\', '/', '@', '#', '%', '.', '-', '_' ])
+  )
+
 getSamples :: Array String -> Object BufferUrl
 getSamples = map BufferUrl
   <<< fold
@@ -241,12 +258,7 @@ getSamples = map BufferUrl
                       *> many1 (Parser.try anyDigit <|> Parser.try anyLetter <|> char ':')
                   )
               )
-            <*>
-              ( fromCharArray <<< Array.fromFoldable <$>
-                  ( whiteSpace
-                      *> many1 (Parser.try anyDigit <|> Parser.try anyLetter <|> oneOf [ ':', '\\', '/', '@', '#', '%', '.', '-', '_' ])
-                  )
-              )
+            <*> fauxUrl
         )
 
 getDrone :: Array String -> Maybe String
@@ -468,3 +480,91 @@ acePostWriteDomLineHTML = mkFn3
     hack <- getAwfulHack_
     hack false
     cb
+
+data BotAction = CallFS { q :: String, p :: Int }
+
+callFS :: Parser BotAction
+callFS = do
+  _ <- ParserCU.string "fs"
+  _ <- whiteSpace
+  q <- fromCharArray <<< Array.fromFoldable <$> many1 ParserCU.anyChar
+  pure $ CallFS { q, p: 1 }
+
+callFSP :: Parser BotAction
+callFSP = do
+  _ <- ParserCU.string "fsp"
+  _ <- whiteSpace
+  p <- intValue
+  _ <- whiteSpace
+  q <- fromCharArray <<< Array.fromFoldable <$> many1 ParserCU.anyChar
+  pure $ CallFS { q, p }
+
+botParser :: Parser BotAction
+botParser = do
+  _ <- ParserCU.string "@w"
+  _ <- whiteSpace
+  Parser.try callFS <|> Parser.try callFSP <|> fail "Could not parse string"
+
+type FSFail' = { detail :: String }
+type FSResult' =
+  { name :: String
+  , description :: String
+  , previews ::
+      { "preview-lq-ogg" :: String
+      , "preview-lq-mp3" :: String
+      , "preview-hq-ogg" :: String
+      , "preview-hq-mp3" :: String
+      }
+  }
+
+type FSSuccess' =
+  { count :: Int
+  , results :: Array FSResult'
+  }
+
+data FSResponse = FSFail FSFail' | FSSuccess FSSuccess'
+
+instance readFSResponse :: JSON.ReadForeign FSResponse where
+  readImpl = (<|>) <$> map FSSuccess <<< JSON.readImpl <*> map FSFail <<< JSON.readImpl
+
+doBotStuff :: String -> Effect Unit
+doBotStuff txt = launchAff_ $ do
+  let parsed = hush $ runParser botParser txt
+  for_ parsed case _ of
+    CallFS { p, q } -> do
+      res <- AX.request
+        ( AX.defaultRequest
+            { url = "https://freesound.org/apiv2/search/text/?page=" <> show p <> "&token=fnqb3U00p5fmEOZSiwGyTLS2ZwYPkygJ7b8KjVEi&query=" <> q <> "&fields=name,description,previews"
+            , method = Left GET
+            , responseFormat = ResponseFormat.string
+            }
+        )
+      case res of
+        Left err -> do
+          liftEffect $ Log.error "Request did not go through"
+          throwError (error $ AX.printError err)
+        Right response -> case (JSON.readJSON response.body) of
+          Left err1 -> throwError (error $ ("Got an error " <> show response.body <> " err " <> show err1))
+          Right (fsResponse :: FSResponse) -> case fsResponse of
+            FSFail _ -> Log.error "Request did not go through"
+            FSSuccess { results } -> liftEffect
+              $ sendChatMessage_
+              $ intercalate "\n\n"
+              $ map formatResultForChat results
+
+formatResultForChat :: FSResult' -> String
+formatResultForChat { name, description, previews: { "preview-hq-ogg": ogg } } = "Name: " <> name <> "\nDescription: " <> String.take 30 description <> "..." <> "\nOgg: " <> ogg
+
+foreign import sendChatMessage_ :: String -> Effect Unit
+
+chatSendMessage :: Fn3 Foreign Foreign (Effect Unit) Unit
+chatSendMessage = mkFn3 \_ ctx cb -> unsafePerformEffect do
+  let txt = JSON.read_ ctx :: Maybe { message :: { text :: String } }
+  for_ txt $ _.message.text >>> doBotStuff
+  cb
+
+chatNewMessage :: Fn3 Foreign Foreign (Effect Unit) Unit
+chatNewMessage = mkFn3 \_ ctx cb -> unsafePerformEffect do
+  let txt = JSON.read_ ctx :: Maybe { text :: String }
+  for_ txt $ _.text >>> doBotStuff
+  cb

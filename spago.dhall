@@ -67,6 +67,7 @@
   , "variant"
   , "wags"
   , "wags-lib"
+  , "web-file"
   , "web-html"
   ]
 , packages = ./packages.dhall

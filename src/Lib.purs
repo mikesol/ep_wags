@@ -73,7 +73,8 @@ import WAGS.Lib.Tidal.Types (BufferUrl(..), AFuture, emptyCtrl, TidalRes, Sample
 import WAGS.Lib.Tidal.Types as TT
 import WAGS.Lib.Tidal.Util (doDownloads)
 import WAGS.Run (Run, run)
-import WAGS.WebAPI (AudioContext)
+import WAGS.WebAPI (AudioContext, MediaRecorder)
+import Web.File.Blob (Blob)
 
 easingAlgorithm :: Cofree ((->) Int) Int
 easingAlgorithm =
@@ -114,6 +115,7 @@ type InitSig =
   -> Effect Unit
   -> Effect Unit
   -> Effect Unit
+  -> Effect Boolean
   -> ((Boolean -> Effect Unit) -> Effect Unit)
   -> Effect Unit
 
@@ -262,6 +264,8 @@ getSamples = map BufferUrl
             <*> fauxUrl
         )
 
+foreign import stopMediaRecorder :: MediaRecorder -> Effect Unit
+
 getDrone :: Array String -> Maybe String
 getDrone = findMap droneParser
   where
@@ -297,7 +301,7 @@ initF
   -> Aff Unit
   -> Effect String
   -> InitSig
-initF cycleRef playingState bufferCache modulesR checkForAuthorization gcText setAlert removeAlert onLoad onStop onPlay setAwfulHack = Ref.read playingState >>=
+initF cycleRef playingState bufferCache modulesR checkForAuthorization gcText setAlert removeAlert onLoad onStop onPlay isRecording setAwfulHack = Ref.read playingState >>=
   case _ of
     Stopped -> do
       startIosAudio
@@ -306,6 +310,7 @@ initF cycleRef playingState bufferCache modulesR checkForAuthorization gcText se
       { event, push } <- create
       nextUpR <- Ref.new (pure unit :: Fiber Unit)
       wagRef <- Ref.new (openFuture (wrap 1.0))
+      mrRef <- Ref.new (Nothing :: Maybe MediaRecorder)
       let
         pushWagAndCarryOn :: Boolean -> FFIAudioSnapshot -> AudioContext -> AFuture -> (AFuture -> Effect Unit) -> Aff Unit
         pushWagAndCarryOn shouldStart ffiAudio audioCtx wag nextWag = do
@@ -313,13 +318,21 @@ initF cycleRef playingState bufferCache modulesR checkForAuthorization gcText se
           doDownloads audioCtx bufferCache mempty identity wag
           liftEffect $ nextWag wag
           when shouldStart do
+            irr <- liftEffect $ isRecording
             let
               FullSceneBuilder { triggerWorld, piece } =
                 engine
                   (pure unit)
                   (map (const <<< const) (r2b wagRef))
                   (pure emptyCtrl)
-                  (pure (wrap mempty))
+                  ( pure
+                      $ wrap
+                      $
+                        if not irr then mempty
+                        else mediaRecorderToBlob2 "audio/ogg; codecs=opus"
+                          uploadBlbToFilestackAndSendMsgToChat
+                          (flip Ref.write mrRef <<< Just)
+                  )
                   (Left (r2b bufferCache))
             trigger /\ world <- snd $ triggerWorld (audioCtx /\ (pure (pure {} /\ pure {})))
             liftEffect do
@@ -332,7 +345,9 @@ initF cycleRef playingState bufferCache modulesR checkForAuthorization gcText se
                       Loading _ -> onPlay
                       _ -> pure unit
                 )
-              Ref.modify_ (minLoading unsubscribe) playingState
+              flip Ref.modify_ playingState $ minLoading do
+                unsubscribe
+                Ref.read mrRef >>= flip for_ stopMediaRecorder
 
         crunch :: Boolean -> FFIAudioSnapshot -> AudioContext -> String -> (AFuture -> Effect Unit) -> Aff Unit
         crunch shouldStart ffiAudio audioCtx txt nextWag = do
@@ -438,6 +453,9 @@ initF cycleRef playingState bufferCache modulesR checkForAuthorization gcText se
 foreign import setUpIosAudio :: Effect Unit
 foreign import startIosAudio :: Effect Unit
 foreign import stopIosAudio :: Effect Unit
+
+foreign import uploadBlbToFilestackAndSendMsgToChat :: Blob -> Effect Unit
+foreign import mediaRecorderToBlob2 :: String -> (Blob -> Effect Unit) -> (MediaRecorder -> Effect Unit) -> MediaRecorder -> Effect Unit
 
 postToolbarInitInternal :: Event Unit -> Foreign -> Effect Unit
 postToolbarInitInternal ctrlPEvt args = do

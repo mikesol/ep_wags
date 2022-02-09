@@ -32,6 +32,15 @@ exports.padInitToolbar = function (hook_name, args) {
 	});
 
 	toolbar.registerButton("epWagsRecord", wagsRecord);
+
+  const wagsExport = toolbar.button({
+		command: "epWagsExport",
+		localizationId: "wagsExport.toolbar.toggle.title",
+		class: "buttonicon ep-wags-export-off",
+	});
+
+	toolbar.registerButton("epWagsExport", wagsExport);
+
 };
 
 const eejs = require('ep_etherpad-lite/node/eejs/');

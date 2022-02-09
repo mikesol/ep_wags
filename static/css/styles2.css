@@ -2,7 +2,14 @@
   content: "!";
   color: #f00;
   font-weight: bold;
-
+}
+.ep-wags-export-off:before {
+  content: "⬤";
+  color: #000;
+}
+.ep-wags-export-on:before {
+  content: "⬤";
+  color: rgb(241, 64, 132);
 }
 .hide-button {
   display: none;

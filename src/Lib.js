@@ -424,6 +424,16 @@ exports.postToolbarInit_ = (args) => (cb) => () => {
       .removeClass("show-wags-error")
       .addClass("hide-wags-error")
   )(() =>
+  $editBar
+    .find(".ep-wags-compiling")
+    .removeClass("hide-wags-compiling")
+    .addClass("show-wags-compiling")
+)(() =>
+  $editBar
+    .find(".ep-wags-compiling")
+    .removeClass("show-wags-compiling")
+    .addClass("hide-wags-compiling")
+)(() =>
     $editBar
       .find(".ep-wags-play")
       .removeClass("buttonicon-play")

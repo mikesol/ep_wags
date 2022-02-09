@@ -3,6 +3,11 @@
   color: #f00;
   font-weight: bold;
 }
+.ep-wags-compiling:before {
+  content: "compiling...";
+  color: rgb(0, 183, 255);
+  font-weight: bold;
+}
 .ep-wags-export-off:before {
   content: "⬤";
   color: #000;
@@ -26,7 +31,13 @@
 .hide-wags-error:before {
   display: none;
 }
+.hide-wags-compiling:before {
+  display: none;
+}
 .show-wags-error:before {
+  display: flex;
+}
+.show-wags-compiling:before {
   display: flex;
 }
 .cog-spin:before {

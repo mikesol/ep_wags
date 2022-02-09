@@ -115,6 +115,8 @@ type InitSig =
   -> Effect Unit
   -> Effect Unit
   -> Effect Unit
+  -> Effect Unit
+  -> Effect Unit
   -> Effect Boolean
   -> ((Boolean -> Effect Unit) -> Effect Unit)
   -> Effect Unit
@@ -301,7 +303,7 @@ initF
   -> Aff Unit
   -> Effect String
   -> InitSig
-initF cycleRef playingState bufferCache modulesR checkForAuthorization gcText setAlert removeAlert onLoad onStop onPlay isRecording setAwfulHack = Ref.read playingState >>=
+initF cycleRef playingState bufferCache modulesR checkForAuthorization gcText setAlert removeAlert setCompiling removeCompiling onLoad onStop onPlay isRecording setAwfulHack = Ref.read playingState >>=
   case _ of
     Stopped -> do
       startIosAudio
@@ -354,6 +356,7 @@ initF cycleRef playingState bufferCache modulesR checkForAuthorization gcText se
           -- todo: can compile be fiberized to be faster?
           -- Log.info "step 1"
           res <- try $ makeAff \cb -> do
+            setCompiling
             compile
               { code: sanitizePS txt
               , loader
@@ -377,6 +380,7 @@ initF cycleRef playingState bufferCache modulesR checkForAuthorization gcText se
           -- Log.info "step 2"
           res # either
             ( \_ -> liftEffect do
+                removeCompiling
                 setAlert
                 -- in case we are not playing yet
                 -- we set on play
@@ -389,6 +393,7 @@ initF cycleRef playingState bufferCache modulesR checkForAuthorization gcText se
                 >>= either (throwError <<< error <<< show) pure
               Ref.write o.modules modulesR
               let wag = (unsafeCoerce :: Foreign -> AFuture) wag'
+              removeCompiling
               launchAff_ $ pushWagAndCarryOn shouldStart ffiAudio audioCtx wag nextWag
       -- Log.info "step 4"
       --------------
@@ -413,7 +418,19 @@ initF cycleRef playingState bufferCache modulesR checkForAuthorization gcText se
             let itype = strToInputType txt
             let nextWag = flip Ref.write wagRef
             case itype of
-              DPureScript -> crunch shouldStart ffiAudio audioCtx txt nextWag
+              DPureScript -> do
+                -- hack: we don't want a compile error to tank starting
+                -- start with a simple sound and then do the compile
+                when shouldStart do
+                  let
+                    fut = T.make 0.1
+                      { earth: T.s "~"
+                      , sounds: Object.empty :: Object.Object BufferUrl
+                      , title: "Local play"
+                      }
+                  pushWagAndCarryOn shouldStart ffiAudio audioCtx fut nextWag
+                -- TODO: now that we have the hack above, do we need `shouldStart` to crunch?
+                crunch false ffiAudio audioCtx txt nextWag
               DText -> do
                 prevCyc <- liftEffect $ Ref.read cycleRef
                 let

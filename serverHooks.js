@@ -17,6 +17,14 @@ exports.padInitToolbar = function (hook_name, args) {
 
   toolbar.registerButton('epWagsError', wagsError);
 
+  const wagsCompiling = toolbar.button({
+    command: 'epWagsCompiling',
+    localizationId: 'epWagsCompiling.toolbar.toggle.title',
+    class: 'buttonicon ep-wags-compiling hide-wags-compiling',
+  });
+  
+  toolbar.registerButton('epWagsCompiling', wagsCompiling);
+  
   const wagsUpload = toolbar.button({
 		command: "epWagsUpload",
 		localizationId: "epWagsUpload.toolbar.toggle.title",

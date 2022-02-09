@@ -3,6 +3,7 @@
 		{
 			"name": "ep_wags",
 			"client_hooks": {
+				"documentReady": "ep_wags/static/js/main:documentReady",
 				"chatSendMessage": "ep_wags/static/js/main:chatSendMessage",
 				"chatNewMessage": "ep_wags/static/js/main:chatNewMessage",
 				"postToolbarInit": "ep_wags/static/js/main:postToolbarInit",

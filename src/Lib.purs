@@ -1,13 +1,14 @@
 module Lib
-  ( acePostWriteDomLineHTML
-  , postToolbarInit
+  ( InitSig
+  , PlayingState(..)
   , aceKeyEvent
-  , initF
-  , setUpIosAudio
+  , acePostWriteDomLineHTML
   , chatNewMessage
   , chatSendMessage
-  , InitSig
-  , PlayingState(..)
+  , documentReady
+  , initF
+  , postToolbarInit
+  , setUpIosAudio
   ) where
 
 import Prelude
@@ -55,6 +56,7 @@ import JIT.API as API
 import JIT.Compile (compile)
 import JIT.EvalSources (Modules, evalSources, freshModules)
 import JIT.Loader (Loader, makeLoader)
+import PrimePump (primePump)
 import Pursuit (PursuitSearchInfo(..), PursuitSearchResult(..), pursuitSearchRequest)
 import Simple.JSON as JSON
 import Text.Parsing.StringParser (Parser, fail, runParser)
@@ -481,6 +483,39 @@ postToolbarInitInternal ctrlPEvt args = do
   bufferCache <- Ref.new Object.empty
   playingState <- Ref.new Stopped
   cycleRef <- Ref.new bd
+  ---------------- prime pump
+  launchAff_ do
+    res <- try $ makeAff \cb -> do
+      compile
+        { code: primePump
+        , loader
+        , compileUrl
+        , ourFaultErrorCallback: fold
+            <<< mapFlipped
+              [ setErrorText_ <<< show
+              , cb <<< Left
+              ]
+            <<< (#)
+        , yourFaultErrorCallback: fold
+            <<< mapFlipped
+              [ setErrorText_ <<< compileErrorsToString
+              , cb <<< Left <<< error <<< show
+              ]
+            <<< (#)
+
+        , successCallback: cb <<< Right <<< _.js
+        }
+      mempty
+    -- Log.info "step 2"
+    res # either
+      ( Log.error <<< show
+      )
+      \js -> liftEffect do
+        modules <- Ref.read modulesR
+        o <- evalSources modules js
+        Ref.write o.modules modulesR
+        pure unit
+  ---------------- end prime pump
   cb <- postToolbarInit_ args
     (initF cycleRef playingState bufferCache modulesR (pure unit) getCurrentText_)
   -- never unsubscribe from key event for now
@@ -624,13 +659,14 @@ chatSendMessage = mkFn3 \_ ctx cb -> unsafePerformEffect do
   for_ txt $ _.message.text >>> doBotStuff
   cb
 
+documentReady :: Fn3 Foreign Foreign (Effect Unit) Unit
+documentReady = mkFn3 \_ _ cb -> unsafePerformEffect do
+  -- no-op for now
+  cb
+
 chatNewMessage :: Fn3 Foreign Foreign (Effect Unit) Unit
 chatNewMessage = mkFn3 \_ ctx cb -> unsafePerformEffect do
   let ipt = JSON.read_ ctx :: Maybe { text :: String, timestamp :: Number }
-  -- Log.info "chatNewMessage"
-  -- as this is called whenever messages are received from the server
-  -- it will also be called when we load the pad for the first time
-  -- this check makes sure
   for_ ipt \ii -> do
     tn <- getTime <$> now
     when (tn - ii.timestamp < 5000.0) do

@@ -55,6 +55,7 @@ import JIT.API as API
 import JIT.Compile (compile)
 import JIT.EvalSources (Modules, evalSources, freshModules)
 import JIT.Loader (Loader, makeLoader)
+import Pursuit (PursuitSearchInfo(..), PursuitSearchResult(..), pursuitSearchRequest)
 import Simple.JSON as JSON
 import Text.Parsing.StringParser (Parser, fail, runParser)
 import Text.Parsing.StringParser as Parser
@@ -482,7 +483,14 @@ acePostWriteDomLineHTML = mkFn3
     hack false
     cb
 
-data BotAction = CallFS { q :: String, p :: Int }
+data BotAction = CallFS { q :: String, p :: Int } | CallPursuit { q :: String }
+
+callPursuit :: Parser BotAction
+callPursuit = do
+  _ <- ParserCU.string "ps"
+  _ <- whiteSpace
+  q <- fromCharArray <<< Array.fromFoldable <$> many1 ParserCU.anyChar
+  pure $ CallPursuit { q }
 
 callFS :: Parser BotAction
 callFS = do
@@ -504,7 +512,7 @@ botParser :: Parser BotAction
 botParser = do
   _ <- ParserCU.string "@w"
   _ <- whiteSpace
-  Parser.try callFS <|> Parser.try callFSP <|> fail "Could not parse string"
+  Parser.try callPursuit <|> Parser.try callFS <|> Parser.try callFSP <|> fail "Could not parse string"
 
 type FSFail' = { detail :: String }
 type FSResult' =
@@ -531,9 +539,23 @@ instance readFSResponse :: JSON.ReadForeign FSResponse where
 
 doBotStuff :: String -> Effect Unit
 doBotStuff txt = launchAff_ $ do
-  -- Log.info ("doing bot stuff: " <> txt)
   let parsed = hush $ runParser botParser txt
   for_ parsed case _ of
+    CallPursuit { q } -> do
+      res <- pursuitSearchRequest q
+      liftEffect
+        $ sendChatMessage_
+        $ intercalate "\n"
+        $ map
+            ( \(PursuitSearchResult i) -> JSON.writeJSON
+                { text: i.text
+                , markup: i.markup
+                , package: i.package
+                , info: (\(PursuitSearchInfo x) -> JSON.write x) i.info
+                }
+            )
+            res
+
     CallFS { p, q } -> do
       res <- AX.request
         ( AX.defaultRequest

@@ -125,7 +125,12 @@ let additions =
           , "strings"
           ]
         , repo = "https://github.com/mikesol/purescript-wags-lib.git"
-        , version = "v0.0.80"
+        , version = "v0.0.81"
+        }
+      , pursuit-lookup =
+        { dependencies = [ "argonaut", "affjax", "argonaut-codecs", "prelude" ]
+        , repo = "https://github.com/nwolverson/purescript-pursuit-lookup.git"
+        , version = "44283e54c8e7d033a714ee4d20d1dbfd0e2fd8d4"
         }
       , everythings-better-with-variants =
         { dependencies =
@@ -137,9 +142,11 @@ let additions =
           , "psci-support"
           , "variant"
           ]
-        , repo = "https://github.com/mikesol/purescript-everythings-better-with-variants.git"
+        , repo =
+            "https://github.com/mikesol/purescript-everythings-better-with-variants.git"
         , version = "v0.0.0"
-        }      , painting =
+        }
+      , painting =
         { dependencies =
           [ "canvas"
           , "colors"

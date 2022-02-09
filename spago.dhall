@@ -49,6 +49,7 @@
   , "profunctor"
   , "profunctor-lenses"
   , "psci-support"
+  , "pursuit-lookup"
   , "quickcheck"
   , "random"
   , "record"

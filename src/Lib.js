@@ -476,7 +476,7 @@ exports.getCurrentText_ = () => {
         .contents()
         .find(".ace-line")
         .map(function () {
-          return $(this).text();
+          return $(this).text().replaceAll('\xa0',' ');
         })
         .get()
         .join("\n");

@@ -32,6 +32,7 @@
   , "identity"
   , "integers"
   , "jit"
+  , "js-date"
   , "js-timers"
   , "lcg"
   , "lists"

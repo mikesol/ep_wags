@@ -3,5 +3,5 @@ export {
 	postToolbarInit,
 	aceKeyEvent,
 	chatSendMessage,
-	chagNewMessage,
+	chatNewMessage,
 } from "../output/Lib/";

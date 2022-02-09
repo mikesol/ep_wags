@@ -157,6 +157,7 @@ const hooks = require("ep_etherpad-lite/static/js/pluginfw/hooks");
 const pad = require("ep_etherpad-lite/static/js/pad").pad;
 const ChatMessage = require("ep_etherpad-lite/static/js/ChatMessage");
 const sendMessage = (text) => {
+	// console.log("sent message called", text);
 	const message = new ChatMessage(text);
 	hooks.aCallAll("chatSendMessage", Object.freeze({ message })).then(() => {
 		pad.collabClient.sendMessage({
@@ -452,7 +453,7 @@ exports.setUpIosAudio = function () {
 	$("#editbar")
 		.find(".ep-wags-play")
 		.after(
-			'<audio id="wagsSilenceHack" loop        src="https://media.graphcms.com/b0IXeyJzSDCZgVRHkFHL"> Your browser does not support the <code>audio</code> element.</audio>'
+			'<audio id="wagsSilenceHack" loop src="https://media.graphcms.com/b0IXeyJzSDCZgVRHkFHL"> Your browser does not support the <code>audio</code> element.</audio>'
 		);
 };
 

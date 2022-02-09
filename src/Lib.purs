@@ -27,6 +27,7 @@ import Data.Function.Uncurried (Fn2, Fn3, mkFn2, mkFn3)
 import Data.Functor (mapFlipped)
 import Data.HTTP.Method (Method(..))
 import Data.Int as DI
+import Data.JSDate (getTime, now)
 import Data.Maybe (Maybe(..), fromMaybe, maybe)
 import Data.Newtype (wrap)
 import Data.Nullable (toMaybe)
@@ -63,12 +64,11 @@ import Text.Parsing.StringParser.Combinators (many1, option)
 import Unsafe.Coerce (unsafeCoerce)
 import WAGS.Interpret (FFIAudioSnapshot, close, constant0Hack, context, contextResume, contextState, makeFFIAudioSnapshot)
 import WAGS.Lib.Learn (Analysers, FullSceneBuilder(..))
-import WAGS.Lib.Tidal (AFuture)
 import WAGS.Lib.Tidal.Cycle (bd)
 import WAGS.Lib.Tidal.Engine (engine)
 import WAGS.Lib.Tidal.Tidal (drone, openFuture, parseWithBrackets)
 import WAGS.Lib.Tidal.Tidal as T
-import WAGS.Lib.Tidal.Types (BufferUrl(..), emptyCtrl, TidalRes, SampleCache)
+import WAGS.Lib.Tidal.Types (BufferUrl(..), AFuture, emptyCtrl, TidalRes, SampleCache)
 import WAGS.Lib.Tidal.Types as TT
 import WAGS.Lib.Tidal.Util (doDownloads)
 import WAGS.Run (Run, run)
@@ -318,6 +318,7 @@ initF cycleRef playingState bufferCache modulesR checkForAuthorization gcText se
                   (pure unit)
                   (map (const <<< const) (r2b wagRef))
                   (pure emptyCtrl)
+                  (pure (wrap mempty))
                   (Left (r2b bufferCache))
             trigger /\ world <- snd $ triggerWorld (audioCtx /\ (pure (pure {} /\ pure {})))
             liftEffect do
@@ -530,6 +531,7 @@ instance readFSResponse :: JSON.ReadForeign FSResponse where
 
 doBotStuff :: String -> Effect Unit
 doBotStuff txt = launchAff_ $ do
+  -- Log.info ("doing bot stuff: " <> txt)
   let parsed = hush $ runParser botParser txt
   for_ parsed case _ of
     CallFS { p, q } -> do
@@ -561,11 +563,19 @@ foreign import sendChatMessage_ :: String -> Effect Unit
 chatSendMessage :: Fn3 Foreign Foreign (Effect Unit) Unit
 chatSendMessage = mkFn3 \_ ctx cb -> unsafePerformEffect do
   let txt = JSON.read_ ctx :: Maybe { message :: { text :: String } }
+  -- Log.info "chatSendMessage"
   for_ txt $ _.message.text >>> doBotStuff
   cb
 
 chatNewMessage :: Fn3 Foreign Foreign (Effect Unit) Unit
 chatNewMessage = mkFn3 \_ ctx cb -> unsafePerformEffect do
-  let txt = JSON.read_ ctx :: Maybe { text :: String }
-  for_ txt $ _.text >>> doBotStuff
+  let ipt = JSON.read_ ctx :: Maybe { text :: String, timestamp :: Number }
+  -- Log.info "chatNewMessage"
+  -- as this is called whenever messages are received from the server
+  -- it will also be called when we load the pad for the first time
+  -- this check makes sure
+  for_ ipt \ii -> do
+    tn <- getTime <$> now
+    when (tn - ii.timestamp < 5000.0) do
+      doBotStuff ii.text
   cb

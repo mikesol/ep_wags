@@ -45,7 +45,7 @@ import WAGS.Lib.Learn.Oscillator (lfo)
 import WAGS.Lib.Tidal.Cycle (noteFromSample)
 import WAGS.Lib.Tidal.FX (fx, goodbye, hello)
 import WAGS.Lib.Tidal.Samples (intentionalSilenceForInternalUseOnly__Sample)
-import WAGS.Lib.Tidal.Tidal (addEffect, onTag, parse_, changeRate, changeVolume, lnbo, make, s)
+import WAGS.Lib.Tidal.Tidal (addEffect, onTag, parse, changeRate, changeVolume, lnbo, make, s)
 import WAGS.Lib.Tidal.Types (AFuture, BufferUrl(..), FoT, Note(..), NoteInFlattenedTime(..), Sample(..), Voice)
 import WAGS.Math (calcSlope)
 

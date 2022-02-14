@@ -67,9 +67,8 @@ import Text.Parsing.StringParser.Combinators (many1, option)
 import Unsafe.Coerce (unsafeCoerce)
 import WAGS.Interpret (FFIAudioSnapshot, close, constant0Hack, context, contextResume, contextState, makeFFIAudioSnapshot)
 import WAGS.Lib.Learn (Analysers, FullSceneBuilder(..))
-import WAGS.Lib.Tidal.Cycle (bd)
 import WAGS.Lib.Tidal.Engine (engine)
-import WAGS.Lib.Tidal.Tidal (drone, openFuture, parseWithBrackets)
+import WAGS.Lib.Tidal.Tidal (drone, openFuture, parse, parseWithBrackets)
 import WAGS.Lib.Tidal.Tidal as T
 import WAGS.Lib.Tidal.Types (BufferUrl(..), AFuture, emptyCtrl, TidalRes, SampleCache)
 import WAGS.Lib.Tidal.Types as TT
@@ -482,7 +481,7 @@ postToolbarInitInternal ctrlPEvt args = do
   modulesR <- freshModules >>= Ref.new
   bufferCache <- Ref.new Object.empty
   playingState <- Ref.new Stopped
-  cycleRef <- Ref.new bd
+  cycleRef <- Ref.new (parse "bd")
   ---------------- prime pump
   launchAff_ do
     res <- try $ makeAff \cb -> do

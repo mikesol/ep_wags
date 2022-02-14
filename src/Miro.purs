@@ -6,15 +6,15 @@ import Control.Promise (Promise, toAffE)
 import Data.Array (find)
 import Data.Either (Either(..))
 import Data.Foldable (for_)
-import Foreign.Object as Object
 import Data.String (Pattern(..), contains)
 import Effect (Effect)
 import Effect.Aff (Error, launchAff_, makeAff)
 import Effect.Class (liftEffect)
 import Effect.Ref as Ref
+import Foreign.Object as Object
 import JIT.EvalSources (freshModules)
 import Lib (PlayingState(..), InitSig, setUpIosAudio, initF)
-import WAGS.Lib.Tidal.Cycle (bd)
+import WAGS.Lib.Tidal.Tidal (parse)
 
 foreign import miroOnReady :: Effect Unit -> InitSig -> (Error -> Effect Unit) -> (Unit -> Effect Unit) -> Effect Unit
 
@@ -44,7 +44,7 @@ main = do
   modulesR <- freshModules >>= Ref.new
   bufferCache <- Ref.new Object.empty
   playingState <- Ref.new Stopped
-  cycleRef <- Ref.new bd
+  cycleRef <- Ref.new (parse "bd")
   txtRf <- Ref.new ""
   let
     onClick = initF cycleRef playingState bufferCache modulesR

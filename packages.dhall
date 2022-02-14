@@ -125,7 +125,7 @@ let additions =
           , "strings"
           ]
         , repo = "https://github.com/mikesol/purescript-wags-lib.git"
-        , version = "v0.0.89"
+        , version = "v0.0.90"
         }
       , pursuit-lookup =
         { dependencies = [ "argonaut", "affjax", "argonaut-codecs", "prelude" ]

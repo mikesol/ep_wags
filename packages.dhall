@@ -85,6 +85,7 @@ let additions =
           , "record"
           , "simple-json"
           , "sized-vectors"
+          , "untagged-union"
           , "transformers"
           , "tuples"
           , "typelevel"
@@ -92,7 +93,7 @@ let additions =
           , "typelevel-prelude"
           ]
         , repo = "https://github.com/mikesol/purescript-wags.git"
-        , version = "v0.6.9"
+        , version = "v0.7.0"
         }
       , free =
         { dependencies =
@@ -125,7 +126,7 @@ let additions =
           , "strings"
           ]
         , repo = "https://github.com/mikesol/purescript-wags-lib.git"
-        , version = "v0.0.97"
+        , version = "v0.0.98"
         }
       , pursuit-lookup =
         { dependencies = [ "argonaut", "affjax", "argonaut-codecs", "prelude" ]

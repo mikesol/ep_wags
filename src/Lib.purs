@@ -73,7 +73,7 @@ import WAGS.Lib.Tidal.Tidal as T
 import WAGS.Lib.Tidal.Types (BufferUrl(..), AFuture, emptyCtrl, TidalRes, SampleCache)
 import WAGS.Lib.Tidal.Types as TT
 import WAGS.Lib.Tidal.Util (doDownloads)
-import WAGS.Run (Run, run)
+import WAGS.Run (BehavingRun, run)
 import WAGS.WebAPI (AudioContext, MediaRecorder)
 import Web.File.Blob (Blob)
 
@@ -341,7 +341,7 @@ initF cycleRef playingState bufferCache modulesR checkForAuthorization gcText se
             liftEffect do
               unsubscribe <- subscribe
                 (run trigger world { easingAlgorithm } ffiAudio piece)
-                ( \(_ :: Run TidalRes Analysers) -> do
+                ( \(_ :: BehavingRun TidalRes Analysers) -> do
                     st <- Ref.read playingState
                     Ref.modify_ (minPlay audioCtx) playingState
                     case st of
